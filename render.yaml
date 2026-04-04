@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: scannerx-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: postgres
+      - key: APP_QUEUE_MODE
+        value: local
+      - key: APP_CORS_ALLOWED_ORIGIN_PATTERNS
+        value: https://*.vercel.app
+      - key: APP_JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: scannerx-postgres
+          property: connectionString
+
+databases:
+  - name: scannerx-postgres
+    plan: free
+    region: singapore
+    postgresMajorVersion: "17"
+    databaseName: scannerx
+    user: scannerx

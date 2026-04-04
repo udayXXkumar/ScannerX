@@ -1,0 +1,10 @@
+CREATE TABLE notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    `read` BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL,
+    type VARCHAR(50) DEFAULT 'INFO',
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

@@ -1,0 +1,56 @@
+<svg width="1475" height="1024" viewBox="0 0 1475 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1475" height="1024" fill="#111417" />
+  <defs>
+    <pattern id="grill" x="0" y="0" width="41" height="41" patternUnits="userSpaceOnUse">
+      <rect width="40" height="40" fill="#050607" />
+    </pattern>
+  </defs>
+  <rect width="1475" height="1024" fill="url(#grill)" />
+
+  <rect width="40" height="40" fill="#161a1d" />
+  <rect x="533" y="41" width="40" height="40" fill="#161a1d" />
+  <rect x="82" y="82" width="40" height="40" fill="#161a1d" />
+  <rect x="246" y="82" width="40" height="40" fill="#161a1d" />
+  <rect x="820" y="82" width="40" height="40" fill="#161a1d" />
+  <rect x="1148" y="82" width="40" height="40" fill="#161a1d" />
+  <rect x="943" y="123" width="40" height="40" fill="#161a1d" />
+  <rect x="1312" y="123" width="40" height="40" fill="#161a1d" />
+  <rect x="328" y="164" width="40" height="40" fill="#161a1d" />
+  <rect x="656" y="164" width="40" height="40" fill="#161a1d" />
+  <rect x="123" y="205" width="40" height="40" fill="#161a1d" />
+  <rect x="451" y="205" width="40" height="40" fill="#161a1d" />
+  <rect x="1148" y="246" width="40" height="40" fill="#161a1d" />
+  <rect x="533" y="287" width="40" height="40" fill="#161a1d" />
+  <rect x="861" y="287" width="40" height="40" fill="#161a1d" />
+  <rect x="1271" y="287" width="40" height="40" fill="#161a1d" />
+  <rect x="164" y="369" width="40" height="40" fill="#161a1d" />
+  <rect x="328" y="369" width="40" height="40" fill="#161a1d" />
+  <rect x="697" y="369" width="40" height="40" fill="#161a1d" />
+  <rect x="615" y="410" width="40" height="40" fill="#161a1d" />
+  <rect x="984" y="410" width="40" height="40" fill="#161a1d" />
+  <rect x="123" y="451" width="40" height="40" fill="#161a1d" />
+  <rect x="1189" y="451" width="40" height="40" fill="#161a1d" />
+  <rect x="1394" y="451" width="40" height="40" fill="#161a1d" />
+  <rect x="369" y="492" width="40" height="40" fill="#161a1d" />
+  <rect x="574" y="533" width="40" height="40" fill="#161a1d" />
+  <rect x="861" y="533" width="40" height="40" fill="#161a1d" />
+  <rect x="1148" y="533" width="40" height="40" fill="#161a1d" />
+  <rect x="1066" y="574" width="40" height="40" fill="#161a1d" />
+  <rect x="164" y="656" width="40" height="40" fill="#161a1d" />
+  <rect x="738" y="656" width="40" height="40" fill="#161a1d" />
+  <rect x="615" y="697" width="40" height="40" fill="#161a1d" />
+  <rect x="861" y="697" width="40" height="40" fill="#161a1d" />
+  <rect x="1271" y="697" width="40" height="40" fill="#161a1d" />
+  <rect x="369" y="738" width="40" height="40" fill="#161a1d" />
+  <rect x="1189" y="738" width="40" height="40" fill="#161a1d" />
+  <rect x="246" y="820" width="40" height="40" fill="#161a1d" />
+  <rect x="533" y="820" width="40" height="40" fill="#161a1d" />
+  <rect x="656" y="820" width="40" height="40" fill="#161a1d" />
+  <rect x="779" y="820" width="40" height="40" fill="#161a1d" />
+  <rect x="41" y="861" width="40" height="40" fill="#161a1d" />
+  <rect x="123" y="902" width="40" height="40" fill="#161a1d" />
+  <rect x="533" y="943" width="40" height="40" fill="#161a1d" />
+  <rect x="1066" y="943" width="40" height="40" fill="#161a1d" />
+  <rect x="328" y="984" width="40" height="40" fill="#161a1d" />
+  <rect x="779" y="984" width="40" height="40" fill="#161a1d" />
+</svg>

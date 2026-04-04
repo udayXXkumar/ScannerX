@@ -1,0 +1,7 @@
+target/
+data/
+wget-log
+.env
+.env.*
+.idea/
+.vscode/
