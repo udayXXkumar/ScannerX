@@ -1,5 +1,11 @@
 # ScannerX Deployment Guide
 
+This file covers the Vercel + Render path.
+
+If you want the AWS EC2 path instead, use:
+
+- [DEPLOYMENT_AWS_EC2.md](/home/kali/Project/web_scanner_anti/DEPLOYMENT_AWS_EC2.md)
+
 ## 1. Push the repo to GitHub
 
 Create a new public repository:
@@ -70,9 +76,8 @@ curl -fsS https://<your-render-service>.onrender.com/actuator/health
 
 ```bash
 cd /home/kali/Project/web_scanner_anti/frontend
-npm i -g vercel
-vercel login
-vercel
+npx vercel@latest login
+npx vercel@latest
 ```
 
 Use:
@@ -85,10 +90,10 @@ Set frontend env vars:
 
 ```bash
 cd /home/kali/Project/web_scanner_anti/frontend
-vercel env add VITE_API_BASE_URL production
-vercel env add VITE_API_BASE_URL preview
-vercel env add VITE_WS_BASE_URL production
-vercel env add VITE_WS_BASE_URL preview
+npx vercel@latest env add VITE_API_BASE_URL production
+npx vercel@latest env add VITE_API_BASE_URL preview
+npx vercel@latest env add VITE_WS_BASE_URL production
+npx vercel@latest env add VITE_WS_BASE_URL preview
 ```
 
 Suggested values:
@@ -98,7 +103,7 @@ Suggested values:
 Redeploy:
 
 ```bash
-vercel --prod
+npx vercel@latest --prod
 ```
 
 ## 5. End-to-end verification
