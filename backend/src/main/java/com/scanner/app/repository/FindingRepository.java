@@ -1,6 +1,7 @@
 package com.scanner.app.repository;
 
 import com.scanner.app.domain.Finding;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +18,9 @@ public interface FindingRepository extends JpaRepository<Finding, Long> {
     List<Finding> findByTargetId(Long targetId);
 
     List<Finding> findTop5ByOrderByCreatedAtDesc();
+
+    @EntityGraph(attributePaths = {"scan", "target"})
+    Optional<Finding> findWithContextById(Long id);
 
     @Query("SELECT COUNT(f) FROM Finding f WHERE f.createdAt >= :startDate")
     long countFindingsSince(@Param("startDate") LocalDateTime startDate);

@@ -49,6 +49,31 @@ export function sanitizeFindingDescription(description) {
     .replace(/\bw3af discovered vulnerability payload\b/gi, 'Detected a vulnerability payload')
 }
 
+export function getFindingDisplayDescription(finding) {
+  const aiDescription = String(finding?.aiDescription || '').trim()
+  if (aiDescription) {
+    return aiDescription
+  }
+
+  return sanitizeFindingDescription(finding?.description)
+}
+
+export function getFindingExploitNarrative(finding) {
+  return String(finding?.exploitNarrative || '').trim()
+}
+
+export function hasFindingAiContent(finding) {
+  return Boolean(String(finding?.aiDescription || '').trim() || String(finding?.exploitNarrative || '').trim())
+}
+
+export function getFindingEnrichmentStatus(finding) {
+  if (hasFindingAiContent(finding)) {
+    return 'COMPLETED'
+  }
+
+  return String(finding?.aiEnrichmentStatus || '').trim().toUpperCase()
+}
+
 export function getFindingCategoryLabel(finding) {
   return String(finding?.category || '').trim() || 'Security Result'
 }

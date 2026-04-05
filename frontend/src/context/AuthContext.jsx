@@ -1,10 +1,40 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getCurrentUser } from '../api/authApi';
+import { subscribeToAppNavigation } from '../lib/appNavigation';
 
 const AuthContext = createContext(null);
+const AUTH_SESSION_VERSION_KEY = 'authSessionVersion';
 
 const normalizeRole = (role) => String(role || '').toUpperCase();
+const createAuthSessionVersion = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const ensureAuthSessionVersion = (tokenValue) => {
+  if (!tokenValue) {
+    localStorage.removeItem(AUTH_SESSION_VERSION_KEY);
+    return null;
+  }
+
+  let sessionVersion = localStorage.getItem(AUTH_SESSION_VERSION_KEY);
+  if (!sessionVersion) {
+    sessionVersion = createAuthSessionVersion();
+    localStorage.setItem(AUTH_SESSION_VERSION_KEY, sessionVersion);
+  }
+
+  return sessionVersion;
+};
+
+const clearPersistedAuth = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem(AUTH_SESSION_VERSION_KEY);
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -13,11 +43,12 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let cancelled = false;
+    const hydrationToken = token;
+    const hydrationSessionVersion = ensureAuthSessionVersion(hydrationToken);
 
     const hydrateUser = async () => {
-      if (!token) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+      if (!hydrationToken) {
+        clearPersistedAuth();
         if (!cancelled) {
           setUser(null);
           setIsLoading(false);
@@ -39,6 +70,12 @@ export const AuthProvider = ({ children }) => {
         if (cancelled) {
           return;
         }
+        if (localStorage.getItem('token') !== hydrationToken) {
+          return;
+        }
+        if (localStorage.getItem(AUTH_SESSION_VERSION_KEY) !== hydrationSessionVersion) {
+          return;
+        }
         const nextUser = {
           id: currentUser.id,
           email: currentUser.email,
@@ -48,14 +85,21 @@ export const AuthProvider = ({ children }) => {
         };
         localStorage.setItem('user', JSON.stringify(nextUser));
         setUser(nextUser);
-      } catch {
+      } catch (error) {
         if (cancelled) {
           return;
         }
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setToken(null);
-        setUser(null);
+        if (localStorage.getItem('token') !== hydrationToken) {
+          return;
+        }
+        if (localStorage.getItem(AUTH_SESSION_VERSION_KEY) !== hydrationSessionVersion) {
+          return;
+        }
+        if (error?.response?.status === 401) {
+          clearPersistedAuth();
+          setToken(null);
+          setUser(null);
+        }
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -71,8 +115,24 @@ export const AuthProvider = ({ children }) => {
     };
   }, [token]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeToAppNavigation(({ reason }) => {
+      if (reason !== 'unauthorized') {
+        return;
+      }
+
+      clearPersistedAuth();
+      setToken(null);
+      setUser(null);
+      setIsLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
   const loginUser = (authData) => {
     localStorage.setItem('token', authData.token);
+    localStorage.setItem(AUTH_SESSION_VERSION_KEY, createAuthSessionVersion());
     const userInfo = {
       id: authData.id,
       email: authData.email,
@@ -94,8 +154,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logoutUser = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    clearPersistedAuth();
     setToken(null);
     setUser(null);
   };

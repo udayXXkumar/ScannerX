@@ -69,12 +69,19 @@ public class EventPublisher {
             findingPayload.put("status", finding.getStatus());
             findingPayload.put("affectedUrl", finding.getAffectedUrl());
             findingPayload.put("description", finding.getDescription());
+            findingPayload.put("aiDescription", finding.getAiDescription());
+            findingPayload.put("exploitNarrative", finding.getExploitNarrative());
+            findingPayload.put("aiEnrichmentStatus", finding.getAiEnrichmentStatus());
+            findingPayload.put("aiModel", finding.getAiModel());
+            findingPayload.put("aiEnrichedAt", finding.getAiEnrichedAt());
+            findingPayload.put("aiEnrichmentError", finding.getAiEnrichmentError());
             findingPayload.put("createdAt", finding.getCreatedAt());
             if (finding.getTarget() != null) {
                 Map<String, Object> targetPayload = new LinkedHashMap<>();
                 targetPayload.put("id", finding.getTarget().getId());
                 targetPayload.put("name", finding.getTarget().getName());
                 targetPayload.put("baseUrl", finding.getTarget().getBaseUrl());
+                targetPayload.put("domain", finding.getTarget().getDomain());
                 findingPayload.put("target", targetPayload);
             }
             if (finding.getScan() != null) {
@@ -108,6 +115,7 @@ public class EventPublisher {
             case "STAGE_STARTED" -> "Stage started.";
             case "STAGE_COMPLETED" -> "Stage completed.";
             case "STAGE_FAILED" -> "Stage could not be completed.";
+            case "FINDING_ENRICHED" -> "AI enrichment completed for a finding.";
             default -> null;
         };
     }

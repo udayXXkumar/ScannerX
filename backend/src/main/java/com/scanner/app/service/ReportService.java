@@ -55,13 +55,14 @@ public class ReportService {
         sb.append("Medium,").append(report.getSummary().getMedium()).append("\n");
         sb.append("Low,").append(report.getSummary().getLow()).append("\n");
         sb.append("Info,").append(report.getSummary().getInfo()).append("\n\n");
-        sb.append("Type,Severity,Endpoint,Description,Evidence,Source\n");
+        sb.append("Type,Severity,Endpoint,Description,Exploit Narrative,Evidence,Source\n");
 
         for (NormalizedScanReport.FindingEntry finding : report.getFindings()) {
             sb.append(escapeCsv(finding.getType())).append(",");
             sb.append(escapeCsv(finding.getSeverity())).append(",");
             sb.append(escapeCsv(finding.getEndpoint())).append(",");
             sb.append(escapeCsv(finding.getDescription())).append(",");
+            sb.append(escapeCsv(finding.getExploitNarrative())).append(",");
             sb.append(escapeCsv(finding.getEvidence())).append(",");
             sb.append(escapeCsv(finding.getSource()));
             sb.append("\n");
@@ -77,7 +78,7 @@ public class ReportService {
     }
 
     public ReportSummaryResponse buildSummary(Long userId, Long targetId, Long scanId) {
-        List<Scan> completedScans = scanRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, "COMPLETED");
+        List<Scan> completedScans = scanRepository.findWithContextByUserIdAndStatusOrderByCreatedAtDesc(userId, "COMPLETED");
         if (scanId != null) {
             Scan selectedScan = scanRepository.findWithContextByIdAndUserId(scanId, userId)
                     .filter(scan -> "COMPLETED".equalsIgnoreCase(scan.getStatus()))
@@ -128,7 +129,7 @@ public class ReportService {
         Scan firstScan = completedScans.isEmpty() ? null : completedScans.getFirst();
         String resolvedTargetName = "All targets";
         if (targetId != null) {
-            resolvedTargetName = targetRepository.findById(targetId)
+            resolvedTargetName = targetRepository.findByIdAndUserId(targetId, userId)
                     .map(target -> target.getName() == null || target.getName().isBlank() ? "Selected target" : target.getName().trim())
                     .orElseGet(() -> firstScan != null && firstScan.getTarget() != null && firstScan.getTarget().getName() != null
                             ? firstScan.getTarget().getName()
@@ -158,7 +159,7 @@ public class ReportService {
         sb.append("Medium,").append(summary.getMediumFindings()).append("\n");
         sb.append("Low,").append(summary.getLowFindings()).append("\n");
         sb.append("Informational,").append(summary.getInformationalFindings()).append("\n\n");
-        sb.append("ID,Target Name,Category,Title,Severity,Status,Affected URL,CWE,OWASP,Created At,Description\n");
+        sb.append("ID,Target Name,Category,Title,Severity,Status,Affected URL,CWE,OWASP,Created At,Description,Exploit Narrative\n");
 
         for (Finding finding : summary.getFindings()) {
             String targetName = finding.getTarget() != null ? finding.getTarget().getName() : summary.getTargetName();
@@ -172,7 +173,8 @@ public class ReportService {
             sb.append(escapeCsv(finding.getCweId())).append(",");
             sb.append(escapeCsv(finding.getOwaspCategory())).append(",");
             sb.append(escapeCsv(finding.getCreatedAt() == null ? "" : finding.getCreatedAt().toString())).append(",");
-            sb.append(escapeCsv(finding.getDescription()));
+            sb.append(escapeCsv(resolveFindingDescription(finding))).append(",");
+            sb.append(escapeCsv(resolveExploitNarrative(finding)));
             sb.append("\n");
         }
 
@@ -204,7 +206,7 @@ public class ReportService {
     }
 
     public String generateHtmlSummary(Long scanId, boolean detailed) {
-        Scan scan = scanRepository.findById(scanId).orElse(null);
+        Scan scan = scanRepository.findWithContextById(scanId).orElse(null);
         if (scan == null) return "<h1>Scan not found</h1>";
 
         List<Finding> findings = sanitizeFindings(findingRepository.findByScanId(scanId));
@@ -227,7 +229,9 @@ public class ReportService {
             .append("</style></head><body>");
 
         html.append("<h1>").append(detailed ? "Detailed" : "Executive").append(" Security Summary</h1>");
-        html.append("<p><strong>Target:</strong> ").append(scan.getTarget().getDomain()).append("</p>");
+        html.append("<p><strong>Target:</strong> ")
+            .append(scan.getTarget() != null && scan.getTarget().getBaseUrl() != null ? scan.getTarget().getBaseUrl() : "Unknown target")
+            .append("</p>");
         html.append("<p><strong>Scan ID:</strong> ").append(scan.getId()).append("</p>");
         html.append("<p><strong>Date:</strong> ").append(scan.getCreatedAt()).append("</p><hr/>");
 
@@ -245,9 +249,14 @@ public class ReportService {
                 html.append("<div class='finding'>");
                 html.append("<h3>[").append(f.getSeverity()).append("] ").append(f.getTitle()).append("</h3>");
                 html.append("<p><strong>URL:</strong> ").append(f.getAffectedUrl()).append("</p>");
-                html.append("<p><strong>Description:</strong> ").append(f.getDescription()).append("</p>");
+                html.append("<p><strong>Description:</strong> ").append(escapeHtml(resolveFindingDescription(f))).append("</p>");
+                if (resolveExploitNarrative(f) != null && !resolveExploitNarrative(f).isBlank()) {
+                    html.append("<p><strong>How It Can Be Exploited:</strong> ")
+                            .append(escapeHtml(resolveExploitNarrative(f)))
+                            .append("</p>");
+                }
                 if (f.getRemediation() != null && !f.getRemediation().isEmpty()) {
-                    html.append("<p><strong>Remediation:</strong> ").append(f.getRemediation()).append("</p>");
+                    html.append("<p><strong>Remediation:</strong> ").append(escapeHtml(f.getRemediation())).append("</p>");
                 }
                 html.append("</div>");
             }
@@ -312,7 +321,7 @@ public class ReportService {
                 .append("</div></div>");
 
         html.append("<div class='section'><h2>Findings</h2><table><thead><tr>")
-                .append("<th>Target</th><th>Title</th><th>Severity</th><th>Status</th><th>URL</th>")
+                .append("<th>Target</th><th>Title</th><th>Severity</th><th>Status</th><th>URL</th><th>Description</th><th>Exploit Narrative</th>")
                 .append("</tr></thead><tbody>");
 
         for (Finding finding : summary.getFindings()) {
@@ -323,6 +332,8 @@ public class ReportService {
                     .append("<td class='").append(severityClass).append("'>").append(escapeHtml(String.valueOf(finding.getSeverity()))).append("</td>")
                     .append("<td>").append(escapeHtml(String.valueOf(finding.getStatus()))).append("</td>")
                     .append("<td>").append(escapeHtml(String.valueOf(finding.getAffectedUrl()))).append("</td>")
+                    .append("<td>").append(escapeHtml(resolveFindingDescription(finding))).append("</td>")
+                    .append("<td>").append(escapeHtml(resolveExploitNarrative(finding))).append("</td>")
                     .append("</tr>");
         }
 
@@ -350,6 +361,13 @@ public class ReportService {
             copy.setStatus(finding.getStatus());
             copy.setAffectedUrl(finding.getAffectedUrl());
             copy.setDescription(sanitizeFindingDescription(finding.getDescription()));
+            copy.setAiDescription(sanitizeFindingDescription(finding.getAiDescription()));
+            copy.setExploitNarrative(finding.getExploitNarrative());
+            copy.setAiEnrichmentStatus(finding.getAiEnrichmentStatus());
+            copy.setAiModel(finding.getAiModel());
+            copy.setAiPromptFingerprint(finding.getAiPromptFingerprint());
+            copy.setAiEnrichedAt(finding.getAiEnrichedAt());
+            copy.setAiEnrichmentError(finding.getAiEnrichmentError());
             copy.setRemediation(finding.getRemediation());
             copy.setCweId(finding.getCweId());
             copy.setOwaspCategory(finding.getOwaspCategory());
@@ -397,6 +415,23 @@ public class ReportService {
                 .replaceAll("(?i)\\bXSSer confirmed injection success\\b", "Confirmed a cross-site scripting payload")
                 .replaceAll("(?i)\\bw3af discovered vulnerability payload\\b", "Detected a vulnerability payload")
                 .trim();
+    }
+
+    private String resolveFindingDescription(Finding finding) {
+        String aiDescription = sanitizeFindingDescription(finding.getAiDescription());
+        if (aiDescription != null && !aiDescription.isBlank()) {
+            return aiDescription;
+        }
+
+        return sanitizeFindingDescription(finding.getDescription());
+    }
+
+    private String resolveExploitNarrative(Finding finding) {
+        if (finding.getExploitNarrative() == null || finding.getExploitNarrative().isBlank()) {
+            return "";
+        }
+
+        return finding.getExploitNarrative().trim();
     }
 
     private String severityClass(String severity) {

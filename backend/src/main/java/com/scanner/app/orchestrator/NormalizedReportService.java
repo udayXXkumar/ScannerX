@@ -39,7 +39,8 @@ public class NormalizedReportService {
             entry.setType(valueOrFallback(finding.getTitle(), "Security Result"));
             entry.setSeverity(normalizeSeverity(finding.getSeverity()));
             entry.setEndpoint(valueOrFallback(finding.getAffectedUrl(), scan.getTarget() != null ? scan.getTarget().getBaseUrl() : ""));
-            entry.setDescription(valueOrFallback(finding.getDescription(), "No description available."));
+            entry.setDescription(valueOrFallback(resolveFindingDescription(finding), "No description available."));
+            entry.setExploitNarrative(valueOrFallback(finding.getExploitNarrative(), ""));
             entry.setEvidence(valueOrFallback(finding.getEvidenceData(), finding.getDescription()));
             entry.setSource(mapSource(finding));
             deduped.putIfAbsent(buildFingerprint(entry), entry);
@@ -98,6 +99,7 @@ public class NormalizedReportService {
                 valueOrFallback(entry.getType(), "type").toLowerCase(Locale.ROOT),
                 valueOrFallback(entry.getEndpoint(), "endpoint").toLowerCase(Locale.ROOT),
                 valueOrFallback(entry.getDescription(), "description").toLowerCase(Locale.ROOT),
+                valueOrFallback(entry.getExploitNarrative(), "exploit").toLowerCase(Locale.ROOT),
                 valueOrFallback(entry.getEvidence(), "evidence").toLowerCase(Locale.ROOT)
         );
     }
@@ -149,6 +151,14 @@ public class NormalizedReportService {
 
     private String valueOrFallback(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String resolveFindingDescription(Finding finding) {
+        if (finding.getAiDescription() != null && !finding.getAiDescription().isBlank()) {
+            return finding.getAiDescription();
+        }
+
+        return finding.getDescription();
     }
 
     private boolean isExecutionNotice(Finding finding) {

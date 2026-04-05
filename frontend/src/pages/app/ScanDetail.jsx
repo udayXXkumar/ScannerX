@@ -13,6 +13,7 @@ import {
   pauseScan,
   resumeScan,
 } from '../../api/scanApi'
+import { isConfirmedUnauthorizedError } from '../../api/axios'
 import SeverityBadge from '../../components/ui/SeverityBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { useScanWebSocket } from '../../hooks/useScanWebSocket'
@@ -21,7 +22,20 @@ import {
   sanitizeFindingDescription,
   sanitizeFindingTitle,
 } from '../../lib/findingUtils'
-import { getScanDisplayName, getScanStatusLabel, getScanTierLabel, isActiveScanStatus, normalizeScanStatus } from '../../lib/scanUtils'
+import {
+  getScanDisplayName,
+  getScanBaseUrl,
+  getScanStatusLabel,
+  getScanTierLabel,
+  isActiveScanStatus,
+  normalizeScanStatus,
+} from '../../lib/scanUtils'
+import {
+  invalidateWorkspaceData,
+  mergeScanIntoWorkspace,
+  removeScanFromWorkspace,
+} from '../../lib/workspaceCache'
+import { workspaceQueryKeys } from '../../lib/workspaceQueryKeys'
 
 const ScanDetail = () => {
   const { id } = useParams()
@@ -29,21 +43,21 @@ const ScanDetail = () => {
   const queryClient = useQueryClient()
 
   const { data: scan, isLoading } = useQuery({
-    queryKey: ['scan', id],
+    queryKey: workspaceQueryKeys.scan(id),
     queryFn: () => getScanById(id),
     enabled: Boolean(id),
     refetchInterval: (query) => (isActiveScanStatus(query.state.data?.status) ? 2000 : false),
   })
 
   const { data: reportData } = useQuery({
-    queryKey: ['scan-report', id],
+    queryKey: workspaceQueryKeys.scanReport(id),
     queryFn: () => getScanReportJson(id),
     enabled: Boolean(id),
     refetchInterval: isActiveScanStatus(scan?.status) ? 3000 : false,
   })
 
   const { data: activityRecords = [] } = useQuery({
-    queryKey: ['scan-activity', id],
+    queryKey: workspaceQueryKeys.scanActivity(id),
     queryFn: () => getScanActivity(id),
     enabled: Boolean(id),
     refetchInterval: isActiveScanStatus(scan?.status) ? 3000 : false,
@@ -51,52 +65,67 @@ const ScanDetail = () => {
 
   const cancelMutation = useMutation({
     mutationFn: () => cancelScan(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scan', id] })
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
+    onSuccess: (nextScan) => {
+      mergeScanIntoWorkspace(queryClient, nextScan)
+      invalidateWorkspaceData(queryClient, {
+        includeFindings: true,
+        includeReports: true,
+        includeNotifications: true,
+        scanId: id,
+      })
     },
   })
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteScan(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['findings'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'unreadCount'] })
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
+      removeScanFromWorkspace(queryClient, Number(id))
+      invalidateWorkspaceData(queryClient, {
+        includeFindings: true,
+        includeReports: true,
+        includeNotifications: true,
+        scanId: id,
+      })
       navigate('/scans')
     },
     onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
       window.alert(getErrorMessage(error, 'Unable to delete this scan right now.'))
     },
   })
 
   const pauseMutation = useMutation({
     mutationFn: () => pauseScan(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scan', id] })
-      queryClient.invalidateQueries({ queryKey: ['scan-activity', id] })
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
+    onSuccess: (nextScan) => {
+      mergeScanIntoWorkspace(queryClient, nextScan)
+      invalidateWorkspaceData(queryClient, {
+        includeReports: true,
+        scanId: id,
+      })
     },
     onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
       window.alert(getErrorMessage(error, 'Unable to pause this scan right now.'))
     },
   })
 
   const resumeMutation = useMutation({
     mutationFn: () => resumeScan(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scan', id] })
-      queryClient.invalidateQueries({ queryKey: ['scan-activity', id] })
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
+    onSuccess: (nextScan) => {
+      mergeScanIntoWorkspace(queryClient, nextScan)
+      invalidateWorkspaceData(queryClient, {
+        includeReports: true,
+        scanId: id,
+      })
     },
     onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
       window.alert(getErrorMessage(error, 'Unable to resume this scan right now.'))
     },
   })
@@ -250,7 +279,7 @@ const ScanDetail = () => {
               </span>
             </div>
             <p className="mt-2 text-gray-400">
-              Target: {scan?.target?.baseUrl || 'Unknown target'} •{' '}
+              Target: {getScanBaseUrl(scan) || 'Unknown target'} •{' '}
               {scan?.createdAt ? new Date(scan.createdAt).toLocaleString() : ''}
             </p>
           </div>
@@ -394,7 +423,7 @@ const ScanDetail = () => {
           <h3 className="text-sm font-medium uppercase tracking-wider text-gray-400">Scan Summary</h3>
           <div className="mt-5 space-y-4">
             <SummaryRow label="Target Name" value={getScanDisplayName(scan)} />
-            <SummaryRow label="Base URL" value={scan?.target?.baseUrl || 'No target URL'} monospace />
+            <SummaryRow label="Base URL" value={getScanBaseUrl(scan)} monospace />
             <SummaryRow label="Tier" value={getScanTierLabel(scan?.tier || scan?.profileType)} />
             <SummaryRow
               label="Created"

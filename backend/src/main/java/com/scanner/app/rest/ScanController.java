@@ -74,7 +74,7 @@ public class ScanController {
             return ResponseEntity.status(401).build();
         }
 
-        return ResponseEntity.ok(scanRepository.findByUserIdOrderByCreatedAtDesc(currentUser.get().getId()));
+        return ResponseEntity.ok(scanRepository.findWithContextByUserIdOrderByCreatedAtDesc(currentUser.get().getId()));
     }
 
     @PostMapping
@@ -129,7 +129,7 @@ public class ScanController {
 
         Scan savedScan = scanRepository.save(scan);
         scanProducer.sendScanJob(savedScan.getId());
-        return ResponseEntity.ok(savedScan);
+        return buildScanResponse(savedScan.getId(), currentUser.get().getId());
     }
     
     @GetMapping("/{id}")
@@ -357,7 +357,7 @@ public class ScanController {
     }
 
     private Optional<User> resolveCurrentUser(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
             return Optional.empty();
         }
 

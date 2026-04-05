@@ -28,6 +28,7 @@ import java.util.Map;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -112,10 +113,41 @@ class ScanControllerIntegrationTests {
                         ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Juice Shop"))
+                .andExpect(jsonPath("$.target.baseUrl").value("http://127.0.0.1:3000/"))
                 .andExpect(jsonPath("$.tier").value("FAST"))
                 .andExpect(jsonPath("$.status").value("QUEUED"));
 
         verify(scanProducer).sendScanJob(any(Long.class));
+    }
+
+    @Test
+    void scanListIncludesTargetBaseUrl() throws Exception {
+        Scan queuedScan = new Scan();
+        queuedScan.setUser(user);
+        queuedScan.setTarget(target);
+        queuedScan.setName(target.getName());
+        queuedScan.setTier("FAST");
+        queuedScan.setProfileType("QUICK");
+        queuedScan.setStatus("QUEUED");
+        queuedScan.setProgress(0);
+        queuedScan.setPauseRequested(Boolean.FALSE);
+        queuedScan.setResumeStageOrder(1);
+        queuedScan.setCreatedAt(LocalDateTime.now());
+        queuedScan.setUpdatedAt(LocalDateTime.now());
+        scanRepository.save(queuedScan);
+
+        mockMvc.perform(get("/api/scans")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].target.id").value(target.getId()))
+                .andExpect(jsonPath("$[0].target.baseUrl").value("http://127.0.0.1:3000/"));
+    }
+
+    @Test
+    void unauthenticatedScanListReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/scans"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Authentication required."));
     }
 
     @Test

@@ -1,40 +1,25 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-set -euo pipefail
+# ScannerX Docker Entrypoint Script
+# Sets up environment and starts the application
 
-if [[ -n "${DATABASE_URL:-}" && -z "${SPRING_DATASOURCE_URL:-}" ]]; then
-  eval "$(
-    python3 <<'PY'
-import os
-import shlex
-from urllib.parse import unquote, urlparse
+set -e
 
-database_url = os.environ.get("DATABASE_URL", "").strip()
-if not database_url:
-    raise SystemExit(0)
-
-parsed = urlparse(database_url)
-if parsed.scheme not in ("postgres", "postgresql"):
-    raise SystemExit(0)
-
-host = parsed.hostname or "localhost"
-port = parsed.port or 5432
-database = (parsed.path or "/scannerx").lstrip("/") or "scannerx"
-jdbc_url = f"jdbc:postgresql://{host}:{port}/{database}"
-
-print(f"export SPRING_DATASOURCE_URL={shlex.quote(jdbc_url)}")
-
-if parsed.username and not os.environ.get("SPRING_DATASOURCE_USERNAME"):
-    print(
-        f"export SPRING_DATASOURCE_USERNAME={shlex.quote(unquote(parsed.username))}"
-    )
-
-if parsed.password and not os.environ.get("SPRING_DATASOURCE_PASSWORD"):
-    print(
-        f"export SPRING_DATASOURCE_PASSWORD={shlex.quote(unquote(parsed.password))}"
-    )
-PY
-  )"
+# Validate required environment variables
+if [ -z "$APP_JWT_SECRET" ] || [ "$APP_JWT_SECRET" = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET" ]; then
+    echo "WARNING: APP_JWT_SECRET is not set or using default value!"
+    echo "Please set APP_JWT_SECRET to a secure random string"
 fi
 
-exec java -jar /app/app.jar --server.port="${PORT:-8080}"
+# Log startup information
+echo "======================================="
+echo "ScannerX Starting"
+echo "======================================="
+echo "Profile: $SPRING_PROFILES_ACTIVE"
+echo "Queue Mode: $APP_QUEUE_MODE"
+echo "Port: $PORT"
+echo "JWT Secret: ${APP_JWT_SECRET:0:10}..." 
+echo "======================================="
+
+# Execute the command passed as arguments
+exec "$@"

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { workspaceQueryKeys } from '../lib/workspaceQueryKeys';
 
 const configuredWebSocketBaseUrl = import.meta.env.VITE_WS_BASE_URL?.trim();
 
@@ -101,19 +102,25 @@ const handleRealtimeInvalidation = (queryClient, scanId, event) => {
   }
 
   if (event.type === 'SCAN_PROGRESS' || event.type === 'SCAN_STATUS') {
-    queryClient.invalidateQueries({ queryKey: ['scan', String(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scan', Number(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scans'] })
-    queryClient.invalidateQueries({ queryKey: ['targets'] })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scan(scanId) })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scans })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
     return
   }
 
   if (event.type === 'FINDING_FOUND') {
-    queryClient.invalidateQueries({ queryKey: ['scan-report', String(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scan-report', Number(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['findings'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-    queryClient.invalidateQueries({ queryKey: ['reportSummary'] })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scanReport(scanId) })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.findings })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
+    return
+  }
+
+  if (event.type === 'FINDING_ENRICHED') {
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scanReport(scanId) })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.findings })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.reportSummary })
     return
   }
 
@@ -125,16 +132,15 @@ const handleRealtimeInvalidation = (queryClient, scanId, event) => {
     event.type === 'SCAN_RESUMED' ||
     event.type === 'PAUSE_REQUESTED'
   ) {
-    queryClient.invalidateQueries({ queryKey: ['scan', String(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scan', Number(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scan-report', String(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scan-report', Number(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scan-activity', String(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scan-activity', Number(scanId)] })
-    queryClient.invalidateQueries({ queryKey: ['scans'] })
-    queryClient.invalidateQueries({ queryKey: ['targets'] })
-    queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-    queryClient.invalidateQueries({ queryKey: ['notifications'] })
-    queryClient.invalidateQueries({ queryKey: ['notifications', 'unreadCount'] })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scan(scanId) })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scanReport(scanId) })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scanActivity(scanId) })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scans })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.findings })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.reportSummary })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.notifications })
+    queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.unreadNotifications })
   }
 }

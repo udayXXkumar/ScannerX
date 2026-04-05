@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Shield, UserCheck, UserCog, UserX, Trash2 } from 'lucide-react'
 import { deleteUser, getAllUsers, updateUserRole, updateUserStatus } from '../../api/adminApi'
 import { useAuth } from '../../context/AuthContext'
+import { isConfirmedUnauthorizedError } from '../../api/axios'
 
 const AdminDashboard = () => {
   const queryClient = useQueryClient()
@@ -19,19 +20,34 @@ const AdminDashboard = () => {
   const statusMutation = useMutation({
     mutationFn: ({ userId, status }) => updateUserStatus(userId, status),
     onSuccess: invalidateUsers,
-    onError: (error) => window.alert(getErrorMessage(error, 'Unable to update user status.')),
+    onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
+      window.alert(getErrorMessage(error, 'Unable to update user status.'))
+    },
   })
 
   const roleMutation = useMutation({
     mutationFn: ({ userId, role }) => updateUserRole(userId, role),
     onSuccess: invalidateUsers,
-    onError: (error) => window.alert(getErrorMessage(error, 'Unable to update user role.')),
+    onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
+      window.alert(getErrorMessage(error, 'Unable to update user role.'))
+    },
   })
 
   const deleteMutation = useMutation({
     mutationFn: deleteUser,
     onSuccess: invalidateUsers,
-    onError: (error) => window.alert(getErrorMessage(error, 'Unable to delete this user.')),
+    onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
+      window.alert(getErrorMessage(error, 'Unable to delete this user.'))
+    },
   })
 
   const activeUsers = users.filter((user) => String(user.status).toUpperCase() === 'ACTIVE').length

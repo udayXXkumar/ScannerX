@@ -14,7 +14,11 @@ public interface ScanRepository extends JpaRepository<Scan, Long> {
     List<Scan> findByTargetId(Long targetId);
     List<Scan> findByUserId(Long userId);
     List<Scan> findByUserIdOrderByCreatedAtDesc(Long userId);
+    @EntityGraph(attributePaths = {"target", "target.user", "user"})
+    List<Scan> findWithContextByUserIdOrderByCreatedAtDesc(Long userId);
     List<Scan> findByUserIdAndStatusOrderByCreatedAtDesc(Long userId, String status);
+    @EntityGraph(attributePaths = {"target", "target.user", "user"})
+    List<Scan> findWithContextByUserIdAndStatusOrderByCreatedAtDesc(Long userId, String status);
     List<Scan> findByUserIdAndStatusInOrderByCreatedAtDesc(Long userId, Collection<String> statuses);
     boolean existsByUserIdAndStatusIn(Long userId, Collection<String> statuses);
     boolean existsByUserIdAndStatusInAndIdNot(Long userId, Collection<String> statuses, Long id);

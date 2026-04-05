@@ -82,6 +82,7 @@ public class ScanExecutionContext {
         batchCompleted = null;
         batchTotal = null;
         stageProgressPercent = null;
+        markForwardProgress();
     }
 
     public synchronized void updateBatchProgress(int completed, int total) {

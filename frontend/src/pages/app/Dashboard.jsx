@@ -2,21 +2,22 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { getDashboardSummary } from '../../api/dashboardApi'
-import { getFindings } from '../../api/findingApi'
-import { getScans } from '../../api/scanApi'
-import { getTargets } from '../../api/targetApi'
 import FindingsStatusChart from '../../components/dashboard/FindingsStatusChart'
 import FindingsTrendChart from '../../components/dashboard/FindingsTrendChart'
 import RecentScans from '../../components/dashboard/RecentScans'
 import ResourceInventory from '../../components/dashboard/ResourceInventory'
 import RiskSeverityChart from '../../components/dashboard/RiskSeverityChart'
 import ThreatScore from '../../components/dashboard/ThreatScore'
+import DarkSelect from '../../components/ui/DarkSelect'
 import {
   getFindingCategoryLabel,
   normalizeFindingSeverity,
   sanitizeFindingTitle,
 } from '../../lib/findingUtils'
-import { isCompletedScan } from '../../lib/scanUtils'
+import { useWorkspaceFindings } from '../../hooks/useWorkspaceFindings'
+import { useWorkspaceScans } from '../../hooks/useWorkspaceScans'
+import { useWorkspaceTargets } from '../../hooks/useWorkspaceTargets'
+import { workspaceQueryKeys } from '../../lib/workspaceQueryKeys'
 
 const ALL_TARGETS = 'all-targets'
 
@@ -24,33 +25,14 @@ const Dashboard = () => {
   const navigate = useNavigate()
   const [selectedTargetId, setSelectedTargetId] = useState(ALL_TARGETS)
 
-  const scansQuery = useQuery({
-    queryKey: ['scans'],
-    queryFn: getScans,
-  })
-
-  const targetsQuery = useQuery({
-    queryKey: ['targets'],
-    queryFn: getTargets,
-  })
+  const scansQuery = useWorkspaceScans()
+  const targetsQuery = useWorkspaceTargets()
 
   const allScans = useMemo(
-    () => [...(scansQuery.data ?? [])].sort(sortByLatest('updatedAt', 'createdAt')),
-    [scansQuery.data],
+    () => scansQuery.scans,
+    [scansQuery.scans],
   )
-
-  const completedScans = useMemo(
-    () =>
-      [...(scansQuery.data ?? [])]
-        .filter((scan) => isCompletedScan(scan.status))
-        .sort(sortByLatest('completedAt', 'updatedAt', 'createdAt')),
-    [scansQuery.data],
-  )
-
-  const targets = useMemo(
-    () => [...(targetsQuery.data ?? [])].sort((left, right) => String(left?.name || '').localeCompare(String(right?.name || ''))),
-    [targetsQuery.data],
-  )
+  const targets = targetsQuery.targets
 
   const effectiveSelectedTargetId =
     selectedTargetId === ALL_TARGETS || targets.some((target) => String(target.id) === String(selectedTargetId))
@@ -60,23 +42,28 @@ const Dashboard = () => {
   const activeTargetId = effectiveSelectedTargetId === ALL_TARGETS ? undefined : Number(effectiveSelectedTargetId)
 
   const summaryQuery = useQuery({
-    queryKey: ['dashboardSummary', activeTargetId ?? ALL_TARGETS],
+    queryKey: workspaceQueryKeys.dashboardSummaryScope({ targetId: activeTargetId ?? ALL_TARGETS }),
     queryFn: () => getDashboardSummary(activeTargetId ? { targetId: activeTargetId } : {}),
+    refetchInterval: scansQuery.activeScan ? 3000 : false,
   })
 
-  const findingsQuery = useQuery({
-    queryKey: ['findings', 'dashboard', activeTargetId ?? ALL_TARGETS],
-    queryFn: () => getFindings({ targetId: activeTargetId, completedOnly: true }),
+  const findingsQuery = useWorkspaceFindings({
+    targetId: activeTargetId,
+    completedOnly: false,
+    scope: 'dashboard',
+    queryOptions: {
+      refetchInterval: scansQuery.activeScan ? 3000 : false,
+    },
   })
 
   const summary = summaryQuery.data
-  const findings = findingsQuery.data ?? []
-  const scopedCompletedScans = activeTargetId
-    ? completedScans.filter((scan) => scan.target?.id === activeTargetId)
-    : completedScans
+  const findings = findingsQuery.findings
   const scopedRecentScans = activeTargetId
     ? allScans.filter((scan) => scan.target?.id === activeTargetId)
     : allScans
+  const scopedTargets = activeTargetId
+    ? targets.filter((target) => target.id === activeTargetId)
+    : targets
 
   const normalizedFindings = findings
     .map((finding) => ({
@@ -100,27 +87,20 @@ const Dashboard = () => {
   )
 
   const targetInventory = Array.from(
-    scopedCompletedScans.reduce((map, scan) => {
-      const target = scan.target
-      if (!target) {
-        return map
-      }
-
+    scopedTargets.reduce((map, target) => {
       const targetFindings = normalizedFindings.filter((finding) => finding.target?.id === target.id)
-      const current = map.get(target.id) || {
+      map.set(target.id, {
         id: target.id,
         name: target.name || `Target #${target.id}`,
         url: target.baseUrl || 'No base URL',
         verificationStatus: target.verificationStatus,
-        scanCount: 0,
+        scanCount: scopedRecentScans.filter((scan) => scan.target?.id === target.id).length,
         totalFindings: 0,
         openFindings: 0,
-      }
-
-      current.scanCount += 1
+      })
+      const current = map.get(target.id)
       current.totalFindings = targetFindings.length
       current.openFindings = targetFindings.filter((finding) => !isResolvedStatus(finding.status)).length
-      map.set(target.id, current)
       return map
     }, new Map()).values(),
   ).sort((left, right) => {
@@ -155,6 +135,30 @@ const Dashboard = () => {
 
   return (
     <div className="page-shell">
+      {scansQuery.isError ? (
+        <section className="rounded-2xl border border-rose-500/16 bg-rose-500/8 px-4 py-3 text-sm text-rose-100">
+          Dashboard scan status is temporarily unavailable. Findings and summary data are still shown where possible.
+        </section>
+      ) : null}
+
+      {targetsQuery.isError ? (
+        <section className="rounded-2xl border border-amber-500/16 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
+          Target inventory is temporarily unavailable. Dashboard scope controls may be incomplete.
+        </section>
+      ) : null}
+
+      {summaryQuery.isError ? (
+        <section className="rounded-2xl border border-rose-500/16 bg-rose-500/8 px-4 py-3 text-sm text-rose-100">
+          Dashboard summary refresh failed. Existing cards may be briefly stale.
+        </section>
+      ) : null}
+
+      {findingsQuery.isError ? (
+        <section className="rounded-2xl border border-rose-500/16 bg-rose-500/8 px-4 py-3 text-sm text-rose-100">
+          Findings refresh failed. Latest live findings may be delayed until the next successful refresh.
+        </section>
+      ) : null}
+
       <section className="max-w-full">
         <DashboardFilter
           value={effectiveSelectedTargetId}
@@ -197,18 +201,14 @@ function DashboardFilter({ value, onChange, options, selectedLabel }) {
   return (
     <div className="surface-card inline-flex min-h-12 max-w-full items-center gap-4 rounded-xl px-4">
       <label className="shrink-0 text-sm text-zinc-500">Targets</label>
-      <select
+      <DarkSelect
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={onChange}
         style={{ width: controlWidth }}
-        className="max-w-full cursor-pointer border-none bg-transparent pr-6 text-sm text-zinc-200 outline-none"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value} className="bg-[#141110] text-zinc-200">
-            {option.label}
-          </option>
-        ))}
-      </select>
+        className="max-w-full min-w-[12rem] border-none bg-transparent px-0"
+        menuClassName="min-w-[12rem]"
+        options={options}
+      />
     </div>
   )
 }
@@ -222,7 +222,7 @@ function LatestFindingsTable({ rows, onOpen }) {
             Latest New Failing Findings
           </p>
           <p className="mt-1.5 text-xs text-zinc-500">
-            Showing the latest completed-run findings collected from your scanner workflow.
+            Showing the latest persisted findings arriving across your active workspace.
           </p>
         </div>
 
@@ -233,7 +233,7 @@ function LatestFindingsTable({ rows, onOpen }) {
 
       {rows.length === 0 ? (
         <div className="surface-card-inner flex min-h-[240px] items-center justify-center">
-          <p className="text-sm text-zinc-400">Completed findings will appear here.</p>
+          <p className="text-sm text-zinc-400">Live findings will appear here as they are persisted.</p>
         </div>
       ) : (
         <div className="min-w-0 overflow-x-auto overflow-y-hidden rounded-[16px] border border-white/6 bg-[#121010]">

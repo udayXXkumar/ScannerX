@@ -2,25 +2,24 @@ import { useState } from 'react'
 import { Download, FileText } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { getReportSummary, downloadReportCsv, downloadReportJson, downloadReportPdf } from '../../api/reportApi'
-import { getTargets } from '../../api/targetApi'
+import DarkSelect from '../../components/ui/DarkSelect'
 import SeverityBadge from '../../components/ui/SeverityBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
-import { sanitizeFindingTitle } from '../../lib/findingUtils'
+import { getFindingDisplayDescription, getFindingExploitNarrative, sanitizeFindingTitle } from '../../lib/findingUtils'
+import { useWorkspaceTargets } from '../../hooks/useWorkspaceTargets'
+import { workspaceQueryKeys } from '../../lib/workspaceQueryKeys'
 
 const ALL_TARGETS = 'all-targets'
 
 const ReportsPage = () => {
   const [selectedTargetId, setSelectedTargetId] = useState(ALL_TARGETS)
 
-  const { data: targets = [] } = useQuery({
-    queryKey: ['targets'],
-    queryFn: getTargets,
-  })
+  const { targets } = useWorkspaceTargets()
 
   const targetId = selectedTargetId === ALL_TARGETS ? undefined : Number(selectedTargetId)
 
-  const { data: summary, isLoading } = useQuery({
-    queryKey: ['reportSummary', targetId ?? 'all-targets'],
+  const { data: summary, isLoading, isError, error } = useQuery({
+    queryKey: workspaceQueryKeys.reportSummaryScope({ targetId: targetId ?? ALL_TARGETS }),
     queryFn: () => getReportSummary({ targetId }),
   })
 
@@ -68,24 +67,30 @@ const ReportsPage = () => {
       </div>
 
       <section className="section-filter-shell">
-        <select
+        <DarkSelect
           value={selectedTargetId}
-          onChange={(event) => setSelectedTargetId(event.target.value)}
-          className="filter-control"
-        >
-          <option value={ALL_TARGETS}>All targets</option>
-          {targets.map((target) => (
-            <option key={target.id} value={String(target.id)}>
-              {target.name}
-            </option>
-          ))}
-        </select>
+          onChange={setSelectedTargetId}
+          className="min-w-[180px]"
+          options={[
+            { value: ALL_TARGETS, label: 'All targets' },
+            ...targets.map((target) => ({
+              value: String(target.id),
+              label: target.name,
+            })),
+          ]}
+        />
 
         <div className="surface-card flex min-h-12 items-center gap-3 px-4">
           <FileText size={18} className="text-prowler-green" />
           <span className="truncate text-sm text-zinc-200">{summary?.scopeLabel || 'All targets'}</span>
         </div>
       </section>
+
+      {isError ? (
+        <section className="rounded-2xl border border-rose-500/16 bg-rose-500/8 px-4 py-3 text-sm text-rose-100">
+          {getReportErrorMessage(error, 'Unable to refresh completed report data right now.')}
+        </section>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Findings" value={summary?.totalFindings ?? 0} />
@@ -149,6 +154,16 @@ const ReportsPage = () => {
                       <div className="table-cell-wrap leading-6 text-white line-clamp-2">
                         {sanitizeFindingTitle(finding.title)}
                       </div>
+                      {getFindingDisplayDescription(finding) ? (
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
+                          {getFindingDisplayDescription(finding)}
+                        </p>
+                      ) : null}
+                      {getFindingExploitNarrative(finding) ? (
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-cyan-200/80">
+                          {getFindingExploitNarrative(finding)}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-6 py-4">
                       <SeverityBadge severity={finding.severity} />
@@ -198,3 +213,7 @@ const SeverityCard = ({ label, value, tone }) => {
 }
 
 export default ReportsPage
+
+function getReportErrorMessage(error, fallbackMessage) {
+  return error?.response?.data?.message || error?.message || fallbackMessage
+}

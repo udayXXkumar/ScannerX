@@ -1,3 +1,0 @@
-{$SCANNERX_HOST} {
-    reverse_proxy backend:8080
-}

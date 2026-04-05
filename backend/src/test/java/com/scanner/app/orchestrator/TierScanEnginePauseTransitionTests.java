@@ -92,6 +92,7 @@ class TierScanEnginePauseTransitionTests {
         scan.setProgress(0);
         scan.setPauseRequested(Boolean.FALSE);
         scan.setResumeStageOrder(1);
+        scan.setTimeoutsEnabled(Boolean.TRUE);
         scan.setCreatedAt(LocalDateTime.now());
         scan.setUpdatedAt(LocalDateTime.now());
 
@@ -187,6 +188,124 @@ class TierScanEnginePauseTransitionTests {
         assertNotNull(finalScan.getPausedAt());
         assertEquals(1, finalScan.getResumeStageOrder());
         assertEquals(1, finalScan.getCurrentStageOrder());
+        verify(toolExecutionService, atLeastOnce()).stopActiveProcesses(scan.getId());
+    }
+
+    @Test
+    void noTimeoutModeStillStopsStalledStepAndCompletesScan() throws Exception {
+        User user = new User();
+        user.setId(11L);
+        user.setEmail("stall-test@example.test");
+        user.setRole("USER");
+        user.setStatus("ACTIVE");
+
+        Target target = new Target();
+        target.setId(21L);
+        target.setUser(user);
+        target.setName("Stall Guard Target");
+        target.setBaseUrl("http://127.0.0.1:3000/");
+        target.setDefaultTier("FAST");
+        target.setTimeoutsEnabled(Boolean.FALSE);
+
+        Scan scan = new Scan();
+        scan.setId(31L);
+        scan.setUser(user);
+        scan.setTarget(target);
+        scan.setName(target.getName());
+        scan.setTier("FAST");
+        scan.setProfileType("QUICK");
+        scan.setStatus("QUEUED");
+        scan.setProgress(0);
+        scan.setPauseRequested(Boolean.FALSE);
+        scan.setResumeStageOrder(1);
+        scan.setTimeoutsEnabled(Boolean.FALSE);
+        scan.setCreatedAt(LocalDateTime.now());
+        scan.setUpdatedAt(LocalDateTime.now());
+
+        CountDownLatch stepStarted = new CountDownLatch(1);
+        CountDownLatch stepInterrupted = new CountDownLatch(1);
+        AtomicReference<Scan> storedScan = new AtomicReference<>(copyScan(scan));
+
+        ToolStepExecutor blockingExecutor = new ToolStepExecutor() {
+            @Override
+            public String getExecutorName() {
+                return "blocking-nuclei";
+            }
+
+            @Override
+            public boolean supports(PlanStep step) {
+                return "nuclei-root".equals(step.key());
+            }
+
+            @Override
+            public StepExecutionResult execute(Scan ignoredScan, PlanStep ignoredStep, ScanExecutionContext ignoredContext, EventPublisher ignoredPublisher) throws Exception {
+                stepStarted.countDown();
+                try {
+                    while (true) {
+                        Thread.sleep(1_000);
+                    }
+                } catch (InterruptedException interruptedException) {
+                    stepInterrupted.countDown();
+                    throw interruptedException;
+                }
+            }
+        };
+
+        TierPlan plan = new TierPlan(
+                ScanTier.FAST,
+                null,
+                List.of(new PlanStage(
+                        1,
+                        "Passive Checks",
+                        List.of(
+                                new PlanStep("normalize-url", "Normalize URL", 10, null, false, Map.of()),
+                                new PlanStep("nuclei-root", "Root Checks", 20, null, true, Map.of("stallWindowSeconds", "1"))
+                        )
+                ))
+        );
+
+        when(tierPlanRegistry.planFor(ScanTier.FAST, false)).thenReturn(plan);
+        when(scanRepository.findWithContextById(scan.getId())).thenAnswer(invocation -> Optional.of(copyScan(storedScan.get())));
+        when(scanRepository.findById(scan.getId())).thenAnswer(invocation -> Optional.of(copyScan(storedScan.get())));
+        when(scanRepository.save(any(Scan.class))).thenAnswer(invocation -> {
+            Scan candidate = invocation.getArgument(0);
+            Scan persisted = copyScan(candidate);
+            storedScan.set(persisted);
+            return copyScan(persisted);
+        });
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(toolExecutionService.normalizeTargetUrl(anyString())).thenReturn(target.getBaseUrl());
+        when(normalizedReportService.persistReport(scan.getId())).thenReturn(new NormalizedScanReport());
+        doNothing().when(tierRuntimeAvailabilityService).assertTierAvailable(ScanTier.FAST);
+
+        TierScanEngine engine = new TierScanEngine(
+                scanRepository,
+                tierPlanRegistry,
+                List.of(blockingExecutor),
+                toolExecutionService,
+                lightCrawlerService,
+                notificationService,
+                userRepository,
+                eventPublisher,
+                normalizedReportService,
+                tierRuntimeAvailabilityService,
+                zapDaemonManager,
+                new ObjectMapper()
+        );
+
+        Thread workerThread = new Thread(() -> engine.runScan(scan.getId()), "tier-scan-stall-guard-test");
+        workerThread.start();
+
+        assertTrue(stepStarted.await(10, TimeUnit.SECONDS), "The stalled step never started.");
+        assertTrue(stepInterrupted.await(10, TimeUnit.SECONDS), "The stalled step was not interrupted by the guard.");
+
+        workerThread.join(10_000);
+        assertFalse(workerThread.isAlive(), "The scan worker did not stop after the stall guard fired.");
+
+        Scan finalScan = storedScan.get();
+        assertEquals("COMPLETED", finalScan.getStatus());
+        assertEquals(100, finalScan.getProgress());
+        assertNotNull(finalScan.getCompletedAt());
         verify(toolExecutionService, atLeastOnce()).stopActiveProcesses(scan.getId());
     }
 

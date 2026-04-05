@@ -32,18 +32,7 @@ public class TargetController {
             return ResponseEntity.status(401).build();
         }
 
-        List<Target> targets = targetRepository.findByUserId(currentUser.get().getId());
-        boolean changed = false;
-
-        for (Target target : targets) {
-            changed = normalizeForDirectScan(target) || changed;
-        }
-
-        if (changed) {
-            targetRepository.saveAll(targets);
-        }
-
-        return ResponseEntity.ok(targets);
+        return ResponseEntity.ok(targetRepository.findByUserId(currentUser.get().getId()));
     }
 
     @PostMapping
@@ -160,7 +149,7 @@ public class TargetController {
     }
 
     private Optional<User> resolveCurrentUser(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
             return Optional.empty();
         }
 

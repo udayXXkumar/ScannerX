@@ -1,14 +1,19 @@
 package com.scanner.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.scanner.app.domain.User;
+import com.scanner.app.repository.UserRepository;
+import com.scanner.app.security.JwtUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -27,6 +32,15 @@ class AuthControllerIntegrationTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @Test
     void registerLoginAndFetchCurrentUser() throws Exception {
@@ -76,5 +90,27 @@ class AuthControllerIntegrationTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.fullName", equalTo("Full name is required.")))
                 .andExpect(jsonPath("$.errors.password", equalTo("Password must be at least 8 characters long.")));
+    }
+
+    @Test
+    void currentUserReturnsUnauthorizedWhenTokenUserNoLongerExists() throws Exception {
+        String email = "deleted-auth-user-" + System.nanoTime() + "@example.test";
+
+        User user = new User();
+        user.setFullName("Deleted User");
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode("Password123!"));
+        user.setRole("USER");
+        user.setStatus("ACTIVE");
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        User savedUser = userRepository.save(user);
+
+        String token = jwtUtil.generateToken(email);
+        userRepository.delete(savedUser);
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
     }
 }

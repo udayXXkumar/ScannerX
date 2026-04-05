@@ -1,12 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Target, Search, Plus, X, CheckCircle2, Shield, Edit2, Trash2, Globe, Play, AlertTriangle, Clock3, CheckCircle, XCircle, PauseCircle, Eye } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { getTargets, createTarget, updateTarget, deleteTarget } from '../../api/targetApi'
-import { createScan, getScans, resumeScan } from '../../api/scanApi'
+import { isConfirmedUnauthorizedError } from '../../api/axios'
+import { createTarget, updateTarget, deleteTarget } from '../../api/targetApi'
+import { createScan, resumeScan } from '../../api/scanApi'
 import { createSchedule } from '../../api/scheduleApi'
-import { getScanDisplayName, getScanStatusLabel, isActiveScanStatus, normalizeScanStatus } from '../../lib/scanUtils'
+import { getScanDisplayName } from '../../lib/scanUtils'
+import { beginAppProgress, endAppProgress } from '../../lib/appNavigation'
+import { useWorkspaceScans } from '../../hooks/useWorkspaceScans'
+import { useWorkspaceTargets } from '../../hooks/useWorkspaceTargets'
+import DarkSelect from '../../components/ui/DarkSelect'
+import {
+  invalidateWorkspaceData,
+  mergeScanIntoWorkspace,
+  mergeTargetIntoWorkspace,
+  removeTargetFromWorkspace,
+} from '../../lib/workspaceCache'
+import { workspaceQueryKeys } from '../../lib/workspaceQueryKeys'
 
 const TargetsList = () => {
   const navigate = useNavigate()
@@ -28,24 +40,25 @@ const TargetsList = () => {
     timeoutsEnabled: true,
   })
 
-  const { data: targets = [], isLoading, isError, error } = useQuery({
-    queryKey: ['targets'],
-    queryFn: getTargets,
-  })
+  const { targets, isLoading, isError, error } = useWorkspaceTargets()
 
-  const { data: scans = [] } = useQuery({
-    queryKey: ['scans'],
-    queryFn: getScans,
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((scan) => isActiveScanStatus(scan.status)) ? 3000 : false,
-  })
+  const {
+    scans,
+    activeScan,
+    hasActiveScan,
+    getScanCountForTarget,
+    getTargetScanState,
+    isPending: isScanStateLoading,
+    isError: isScanStateError,
+  } = useWorkspaceScans()
 
   const createMutation = useMutation({
     mutationFn: createTarget,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['reportSummary'] })
+    onSuccess: (target) => {
+      mergeTargetIntoWorkspace(queryClient, target)
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.reportSummary })
       setIsModalOpen(false)
       setFormData({ name: '', baseUrl: '', defaultTier: 'MEDIUM', timeoutsEnabled: true })
     },
@@ -56,17 +69,18 @@ const TargetsList = () => {
     onSuccess: () => {
       setScheduleModalOpen(false)
       setTargetToSchedule(null)
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
-      queryClient.invalidateQueries({ queryKey: ['schedules'] })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.schedules })
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateTarget(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['reportSummary'] })
+    onSuccess: (target) => {
+      mergeTargetIntoWorkspace(queryClient, target)
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.reportSummary })
       setEditModalOpen(false)
       setTargetToEdit(null)
     },
@@ -74,14 +88,13 @@ const TargetsList = () => {
 
   const deleteMutation = useMutation({
     mutationFn: deleteTarget,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['findings'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['reportSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'unreadCount'] })
+    onSuccess: (_, targetId) => {
+      removeTargetFromWorkspace(queryClient, targetId)
+      invalidateWorkspaceData(queryClient, {
+        includeFindings: true,
+        includeReports: true,
+        includeNotifications: true,
+      })
     },
   })
 
@@ -89,28 +102,41 @@ const TargetsList = () => {
     mutationFn: createScan,
     onMutate: (variables) => {
       setLaunchingTargetId(variables.target.id)
+      beginAppProgress('scan-launch')
     },
     onSuccess: (scan) => {
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['reportSummary'] })
+      mergeScanIntoWorkspace(queryClient, scan)
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scans })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
       navigate(`/scans/${scan.id}`)
     },
     onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
       window.alert(getMutationErrorMessage(error, 'Unable to start scan right now.'))
     },
     onSettled: () => {
       setLaunchingTargetId(null)
+      endAppProgress('scan-launch')
     },
   })
 
   const resumeMutation = useMutation({
     mutationFn: resumeScan,
+    onMutate: () => {
+      beginAppProgress('scan-resume')
+    },
     onSuccess: (scan) => {
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
+      mergeScanIntoWorkspace(queryClient, scan)
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scans })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
       navigate(`/scans/${scan.id}`)
+    },
+    onSettled: () => {
+      endAppProgress('scan-resume')
     },
   })
 
@@ -133,6 +159,7 @@ const TargetsList = () => {
     setTargetToEdit({
       ...target,
       defaultTier: target.defaultTier || 'MEDIUM',
+      timeoutsEnabled: target.timeoutsEnabled ?? true,
     })
     setEditModalOpen(true)
   }
@@ -151,15 +178,15 @@ const TargetsList = () => {
     })
   }
 
-  const activeScan = useMemo(
-    () => scans.find((scan) => isActiveScanStatus(scan.status)),
-    [scans],
-  )
-  const hasActiveScan = Boolean(activeScan)
   const activeTargetId = activeScan?.target?.id
   const activeScanMessage = 'A scan is already running. Let it complete or cancel it before starting another.'
+  const scanStateUnavailableMessage = 'Latest scan state is unavailable. Refresh or sign in again before launching another scan.'
+  const isTargetStatusPending = isScanStateLoading && scans.length === 0
 
-  const readyCount = targets.filter((target) => getTargetScanState(scans, target.id).statusKey === 'READY').length
+  const readyCount =
+    isTargetStatusPending || isScanStateError
+      ? 0
+      : targets.filter((target) => getTargetScanState(target.id).statusKey === 'READY').length
   const trackedDomains = new Set(targets.map((target) => target.domain).filter(Boolean)).size
   const filteredTargets = targets.filter((target) => {
     const query = searchQuery.trim().toLowerCase()
@@ -229,6 +256,24 @@ const TargetsList = () => {
           </div>
         ) : null}
 
+        {isTargetStatusPending ? (
+          <div className="border-b border-white/8 bg-white/[0.03] px-4 py-3">
+            <div className="flex items-center gap-3 text-sm text-slate-300">
+              <Clock3 className="h-4 w-4 shrink-0 text-slate-400" />
+              <span>Checking latest scan state before enabling launch actions.</span>
+            </div>
+          </div>
+        ) : null}
+
+        {isScanStateError ? (
+          <div className="border-b border-rose-500/16 bg-rose-500/8 px-4 py-3">
+            <div className="flex items-center gap-3 text-sm text-rose-100">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-300" />
+              <span>{scanStateUnavailableMessage}</span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="table-scroll">
           {isLoading ? (
             <div className="flex items-center justify-center h-full text-slate-400">Loading targets...</div>
@@ -256,10 +301,15 @@ const TargetsList = () => {
           ) : (
             <div className="divide-y divide-white/8">
               {filteredTargets.map((target) => {
-                const targetScans = scans.filter((scan) => scan.target?.id === target.id)
-                const targetStatus = getTargetScanState(scans, target.id, activeTargetId)
+                const targetScansCount = getScanCountForTarget(target.id)
+                const targetStatus = getTargetScanState(target.id)
                 const isCurrentActiveTarget = activeTargetId === target.id
-                const canResumePausedScan = targetStatus.statusKey === 'PAUSED' && !hasActiveScan && targetStatus.scan?.id
+                const scanStateUnavailable = targetStatus.statusKey === 'CHECKING' || targetStatus.statusKey === 'UNAVAILABLE'
+                const canResumePausedScan =
+                  targetStatus.statusKey === 'PAUSED' &&
+                  !hasActiveScan &&
+                  !scanStateUnavailable &&
+                  targetStatus.scan?.id
                 return (
                 <div
                   key={target.id}
@@ -304,7 +354,7 @@ const TargetsList = () => {
                     <div className="flex flex-wrap items-center gap-5 xl:ml-6 xl:justify-end">
                       <div className="text-left xl:text-right">
                         <p className="text-xs font-medium text-slate-500 uppercase">Scans</p>
-                        <p className="text-2xl font-bold text-white mt-1">{targetScans.length}</p>
+                        <p className="text-2xl font-bold text-white mt-1">{targetScansCount}</p>
                       </div>
 
                       <div className="text-left xl:text-right">
@@ -329,9 +379,9 @@ const TargetsList = () => {
                           <button
                             type="button"
                             onClick={() => resumeMutation.mutate(targetStatus.scan.id)}
-                            disabled={resumeMutation.isPending}
+                            disabled={resumeMutation.isPending || scanStateUnavailable}
                             className="surface-button-primary h-10 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                            title="Resume Scan"
+                            title={scanStateUnavailable ? scanStateUnavailableMessage : 'Resume Scan'}
                           >
                             <Play size={15} className="fill-current" />
                             {resumeMutation.isPending ? 'Resuming...' : 'Resume Scan'}
@@ -345,12 +395,28 @@ const TargetsList = () => {
                                 target: { id: target.id, name: target.name },
                               })
                             }
-                            disabled={hasActiveScan || (scanMutation.isPending && launchingTargetId === target.id)}
+                            disabled={
+                              scanStateUnavailable ||
+                              hasActiveScan ||
+                              (scanMutation.isPending && launchingTargetId === target.id)
+                            }
                             className="surface-button-primary h-10 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                            title={hasActiveScan ? activeScanMessage : 'Start Scan'}
+                            title={
+                              scanStateUnavailable
+                                ? scanStateUnavailableMessage
+                                : hasActiveScan
+                                  ? activeScanMessage
+                                  : 'Start Scan'
+                            }
                           >
                             <Play size={15} className="fill-current" />
-                            {hasActiveScan ? 'Scan Locked' : 'Scan Now'}
+                            {scanStateUnavailable
+                              ? targetStatus.statusKey === 'CHECKING'
+                                ? 'Checking...'
+                                : 'Unavailable'
+                              : hasActiveScan
+                                ? 'Scan Locked'
+                                : 'Scan Now'}
                           </button>
                         )}
                         <button
@@ -430,6 +496,10 @@ const TargetStatusPill = ({ targetStatus }) => {
   const tone =
     targetStatus.statusKey === 'IN_PROGRESS'
       ? 'border-white/12 bg-white/[0.04] text-zinc-300'
+      : targetStatus.statusKey === 'CHECKING'
+        ? 'border-white/10 bg-white/[0.03] text-slate-300'
+        : targetStatus.statusKey === 'UNAVAILABLE'
+          ? 'border-rose-500/25 bg-rose-500/10 text-rose-200'
       : targetStatus.statusKey === 'PAUSED'
         ? 'border-amber-500/25 bg-amber-500/10 text-amber-200'
         : targetStatus.statusKey === 'LOCKED'
@@ -443,6 +513,10 @@ const TargetStatusPill = ({ targetStatus }) => {
   const Icon =
     targetStatus.statusKey === 'IN_PROGRESS'
       ? Clock3
+      : targetStatus.statusKey === 'CHECKING'
+        ? Clock3
+        : targetStatus.statusKey === 'UNAVAILABLE'
+          ? AlertTriangle
       : targetStatus.statusKey === 'PAUSED'
         ? PauseCircle
         : targetStatus.statusKey === 'LOCKED'
@@ -459,40 +533,6 @@ const TargetStatusPill = ({ targetStatus }) => {
       {targetStatus.label}
     </span>
   )
-}
-
-function getTargetScanState(scans, targetId, activeTargetId) {
-  const latestScan = [...scans]
-    .filter((scan) => scan.target?.id === targetId)
-    .sort((left, right) => new Date(right.updatedAt || right.createdAt || 0) - new Date(left.updatedAt || left.createdAt || 0))[0]
-
-  if (activeTargetId && activeTargetId === targetId) {
-    return { statusKey: 'IN_PROGRESS', label: 'In Progress', scan: latestScan }
-  }
-
-  if (activeTargetId && activeTargetId !== targetId) {
-    return { statusKey: 'LOCKED', label: 'Locked', scan: latestScan }
-  }
-
-  if (!latestScan) {
-    return { statusKey: 'READY', label: 'Ready', scan: null }
-  }
-
-  const normalized = normalizeScanStatus(latestScan.status)
-  if (normalized === 'QUEUED' || normalized === 'RUNNING') {
-    return { statusKey: 'IN_PROGRESS', label: 'In Progress', scan: latestScan }
-  }
-  if (normalized === 'PAUSED') {
-    return { statusKey: 'PAUSED', label: 'Paused', scan: latestScan }
-  }
-  if (normalized === 'COMPLETED') {
-    return { statusKey: 'COMPLETED', label: 'Completed', scan: latestScan }
-  }
-  if (normalized === 'FAILED' || normalized === 'CANCELLED') {
-    return { statusKey: 'FAILED', label: 'Failed', scan: latestScan }
-  }
-
-  return { statusKey: 'READY', label: getScanStatusLabel(latestScan.status), scan: latestScan }
 }
 
 const StatCard = ({ label, value, tone, icon }) => {
@@ -531,7 +571,7 @@ const CreateTargetModal = ({ onClose, formData, setFormData, onSubmit, isLoading
       summaryItems={[
         'A clear operator-friendly target name',
         'The primary base URL used for direct scan launches',
-        'A fixed scan tier and timeout policy for every future launch',
+        'A simple timeout toggle for future launches',
       ]}
       errorMessage={errorMessage}
       footer={
@@ -568,37 +608,18 @@ const CreateTargetModal = ({ onClose, formData, setFormData, onSubmit, isLoading
 
         <div className="grid gap-5 md:grid-cols-2">
           <Field label="Tier" hint="All launches for this target inherit this depth.">
-            <select
+            <DarkSelect
               value={formData.defaultTier}
-              onChange={(event) => setFormData({ ...formData, defaultTier: event.target.value })}
-              className="modal-input"
-            >
-              <option value="FAST">Fast</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="DEEP">Deep</option>
-            </select>
+              onChange={(defaultTier) => setFormData({ ...formData, defaultTier })}
+              variant="field"
+              options={TIER_OPTIONS}
+            />
           </Field>
 
-          <Field label="Timeouts" hint="Keep the default safety budget on unless you need unrestricted runs.">
-            <label className="flex h-[52px] items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-sm text-slate-200">
-              <span>{formData.timeoutsEnabled ? 'Enabled' : 'Disabled'}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={formData.timeoutsEnabled}
-                onClick={() => setFormData({ ...formData, timeoutsEnabled: !formData.timeoutsEnabled })}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                  formData.timeoutsEnabled ? 'bg-[#60dfb2]/80' : 'bg-white/10'
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                    formData.timeoutsEnabled ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
-          </Field>
+          <TimeoutToggleField
+            value={formData.timeoutsEnabled}
+            onChange={(timeoutsEnabled) => setFormData({ ...formData, timeoutsEnabled })}
+          />
         </div>
       </form>
     </FormDialog>
@@ -659,7 +680,7 @@ const EditTargetModal = ({ target, setTarget, onSubmit, isLoading, errorMessage,
       summaryItems={[
         'Adjust operator-facing target details',
         'Update URL metadata when environments change',
-        'Change the default tier for future launches',
+        'Change the default tier and timeout toggle for future launches',
       ]}
       errorMessage={errorMessage}
       footer={
@@ -690,17 +711,21 @@ const EditTargetModal = ({ target, setTarget, onSubmit, isLoading, errorMessage,
           />
         </Field>
 
-        <Field label="Tier" hint="Future scans inherit this depth automatically.">
-          <select
-            value={target.defaultTier || 'MEDIUM'}
-            onChange={(event) => setTarget({ ...target, defaultTier: event.target.value })}
-            className="modal-input"
-          >
-            <option value="FAST">Fast</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="DEEP">Deep</option>
-          </select>
-        </Field>
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field label="Tier">
+            <DarkSelect
+              value={target.defaultTier || 'MEDIUM'}
+              onChange={(defaultTier) => setTarget({ ...target, defaultTier })}
+              variant="field"
+              options={TIER_OPTIONS}
+            />
+          </Field>
+
+          <TimeoutToggleField
+            value={target.timeoutsEnabled ?? true}
+            onChange={(timeoutsEnabled) => setTarget({ ...target, timeoutsEnabled })}
+          />
+        </div>
       </form>
     </FormDialog>
   </ModalShell>
@@ -802,6 +827,28 @@ const Field = ({ label, hint, children }) => (
   </div>
 )
 
+const TimeoutToggleField = ({ value, onChange }) => (
+  <div className="flex min-h-[52px] items-center justify-between gap-4 md:mt-[28px] md:justify-center md:gap-5">
+    <span className="text-base font-semibold text-slate-100">Timeouts</span>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      aria-label={`Timeouts ${value ? 'enabled' : 'disabled'}`}
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+        value ? 'bg-[#60dfb2]/80' : 'bg-white/10'
+      }`}
+    >
+      <span
+        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+          value ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  </div>
+)
+
 const ModalActions = ({ formId, onClose, submitLabel, disabled }) => (
   <div className="flex items-center justify-between gap-3">
     <p className="hidden text-sm text-zinc-500 md:block">Changes are applied immediately after submission.</p>
@@ -846,5 +893,11 @@ const getMutationErrorMessage = (error, fallbackMessage) => {
 
   return fallbackMessage
 }
+
+const TIER_OPTIONS = [
+  { value: 'FAST', label: 'Fast' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'DEEP', label: 'Deep' },
+]
 
 export default TargetsList

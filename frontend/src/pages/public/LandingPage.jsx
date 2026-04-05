@@ -46,12 +46,13 @@ const navItems = [
   { label: 'Docs', href: '#docs' },
 ]
 
-const capabilityChips = ['Live Findings', 'Queued Runs', 'Reports', 'Notifications', 'Scan History', 'Rescans']
+const capabilityChips = ['Live Findings', 'AI Finding Intel', 'Queued Runs', 'Reports', 'Notifications', 'Rescans']
 
 const platformHighlights = [
   'Create a target with a base URL, tags, and project grouping',
   'Submit the URL once and run the scanner stack directly against it',
   'Queue asynchronous runs and stream findings back over WebSocket',
+  'AI enrichment turns raw scanner output into clearer descriptions and exploit context',
   'Compare scan history, export reports, and schedule recurring rescans',
 ]
 
@@ -83,6 +84,16 @@ const outcomeRows = [
     bullets: [
       'WebSocket updates surface progress and new findings during the scan',
       'Comparison helps separate newly introduced issues from already known ones',
+    ],
+    visual: 'findings',
+  },
+  {
+    eyebrow: 'AI Finding Intelligence',
+    title: 'Turn raw scanner output into clearer security explanations your team can act on',
+    body: 'ScannerX now enriches saved findings with AI-assisted descriptions and defender-safe exploit context so operators can understand what the issue means before they open an export.',
+    bullets: [
+      'AI explanations stay defensive and focus on context, prerequisites, and impact',
+      'Enrichment is persisted with the finding so reports and reviews stay consistent',
     ],
     visual: 'findings',
   },
@@ -139,13 +150,17 @@ const productStats = [
     description: 'CSV, JSON, executive HTML, and detailed HTML report outputs',
   },
   {
-    label: 'Rescans',
-    value: 'Cron',
-    description: 'scheduled jobs let teams automatically rescan important URLs',
+    label: 'AI Assist',
+    value: 'Live',
+    description: 'saved findings gain clearer descriptions and defender-safe exploit context',
   },
 ]
 
 const workflowCards = [
+  {
+    title: 'AI-Enriched Findings',
+    body: 'ScannerX adds AI-assisted descriptions and safe exploit context to persisted findings so the same language follows triage and reporting.',
+  },
   {
     title: 'Scan Comparison',
     body: 'Compare two runs of the same target and separate newly introduced findings from resolved or unchanged ones.',
@@ -358,7 +373,7 @@ export default function LandingPage() {
               <span className="rounded-full bg-cyan-300 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-black">
                 New
               </span>
-              <span>Watch live findings. Follow the interactive flow</span>
+              <span>Watch live findings and AI-powered context arrive together</span>
               <ArrowRight size={15} />
             </a>
 
@@ -371,8 +386,9 @@ export default function LandingPage() {
 
             <p className="mx-auto mt-6 max-w-[32rem] text-[clamp(1rem,1.5vw,1.35rem)] leading-[1.55] text-white/64">
               Give ScannerX a URL and let the platform run web
-              vulnerability checks, stream findings live, compare scan history, and
-              export the result from one operator-friendly workspace.
+              vulnerability checks, stream findings live, enrich each result with
+              AI-powered finding intelligence, compare scan history, and export
+              the result from one operator-friendly workspace.
             </p>
 
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -420,8 +436,8 @@ export default function LandingPage() {
               <p className="mt-5 text-base leading-8 text-white/62">
                 ScannerX is purpose-built around the real application you already
                 have: target onboarding, asynchronous execution, live findings,
-                comparison views, report exports, and recurring rescans for the
-                same URL.
+                AI-assisted finding enrichment, comparison views, report exports,
+                and recurring rescans for the same URL.
               </p>
 
               <div className="mt-7 space-y-3">
@@ -517,8 +533,9 @@ export default function LandingPage() {
               </h2>
               <p className="mt-5 text-base leading-8 text-white/60">
                 Instead of placeholder marketing, this section now points at the
-                outputs already implemented in the project: live progress, reports,
-                comparison, notifications, and scheduled rescans for the same target.
+                outputs already implemented in the project: live progress,
+                AI-enriched findings, reports, comparison, notifications, and
+                scheduled rescans for the same target.
               </p>
             </div>
 
@@ -539,7 +556,7 @@ export default function LandingPage() {
               ))}
             </div>
 
-            <div className="mt-10 grid gap-4 lg:grid-cols-3">
+            <div className="mt-10 grid gap-4 lg:grid-cols-4">
               {workflowCards.map((card) => (
                 <div
                   key={card.title}
@@ -606,8 +623,8 @@ export default function LandingPage() {
                   <LandingScannerXWordmark className="h-auto w-[176px]" />
                   <p className="mt-5 text-base leading-8 text-white/60">
                     Join teams using ScannerX to add a target, run a scan,
-                    review findings, export results, and rescan important URLs on a
-                    schedule.
+                    review AI-enriched findings, export results, and rescan
+                    important URLs on a schedule.
                   </p>
                 </div>
 

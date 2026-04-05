@@ -28,6 +28,7 @@ public class NormalizedScanReport {
         private String severity;
         private String endpoint;
         private String description;
+        private String exploitNarrative;
         private String evidence;
         private String source;
     }

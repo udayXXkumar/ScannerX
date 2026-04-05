@@ -152,7 +152,7 @@ public class AuthController {
         }
         return userRepository.findByEmail(authentication.getName())
                 .map(u -> ResponseEntity.ok(buildCurrentUserResponse(u)))
-                .orElse(ResponseEntity.notFound().build());
+                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
     }
 
     @PutMapping("/profile")

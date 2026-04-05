@@ -74,7 +74,7 @@ public class FindingController {
     }
 
     private Optional<User> resolveCurrentUser(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
             return Optional.empty();
         }
 

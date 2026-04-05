@@ -51,7 +51,7 @@ public class DashboardController {
         }
 
         Long userId = currentUser.get().getId();
-        List<Scan> completedScans = scanRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, "COMPLETED");
+        List<Scan> scopedScans = scanRepository.findWithContextByUserIdOrderByCreatedAtDesc(userId);
         List<Target> userTargets = targetRepository.findByUserId(userId);
 
         Long effectiveScanId = null;
@@ -63,24 +63,24 @@ public class DashboardController {
                 return ResponseEntity.notFound().build();
             }
             Long selectedTargetId = effectiveTargetId;
-            completedScans = completedScans.stream()
+            scopedScans = scopedScans.stream()
                     .filter(scan -> scan.getTarget() != null && scan.getTarget().getId().equals(selectedTargetId))
                     .toList();
         } else if (scanId != null) {
             Optional<Scan> selectedScan = scanRepository.findWithContextByIdAndUserId(scanId, userId);
-            if (selectedScan.isEmpty() || !"COMPLETED".equalsIgnoreCase(selectedScan.get().getStatus())) {
+            if (selectedScan.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
             effectiveScanId = scanId;
-            completedScans = completedScans.stream().filter(scan -> scan.getId().equals(scanId)).toList();
-            effectiveTargetId = completedScans.isEmpty() ? null : completedScans.getFirst().getTarget().getId();
+            scopedScans = scopedScans.stream().filter(scan -> scan.getId().equals(scanId)).toList();
+            effectiveTargetId = scopedScans.isEmpty() ? null : scopedScans.getFirst().getTarget().getId();
         }
 
         DashboardSummary summary = new DashboardSummary();
         if (effectiveTargetId != null) {
             summary.setTotalTargets(1);
         } else if (effectiveScanId != null) {
-            summary.setTotalTargets(completedScans.stream()
+            summary.setTotalTargets(scopedScans.stream()
                     .map(scan -> scan.getTarget() == null ? null : scan.getTarget().getId())
                     .filter(java.util.Objects::nonNull)
                     .distinct()
@@ -88,13 +88,22 @@ public class DashboardController {
         } else {
             summary.setTotalTargets(userTargets.size());
         }
-        summary.setTotalScans(completedScans.size());
+        summary.setTotalScans(scopedScans.size());
 
-        List<Finding> visibleFindings = findingRepository.findVisibleFindings(userId, effectiveTargetId, effectiveScanId, true);
+        List<Finding> visibleFindings = findingRepository.findVisibleFindings(userId, effectiveTargetId, effectiveScanId, false);
         summary.setTotalFindings(visibleFindings.size());
 
-        long total = summary.getTotalFindings();
-        int score = (int) Math.max(10, 100 - (total * 2));
+        long criticalFindings = visibleFindings.stream().filter(finding -> "CRITICAL".equalsIgnoreCase(String.valueOf(finding.getSeverity()))).count();
+        long highFindings = visibleFindings.stream().filter(finding -> "HIGH".equalsIgnoreCase(String.valueOf(finding.getSeverity()))).count();
+        long mediumFindings = visibleFindings.stream().filter(finding -> "MEDIUM".equalsIgnoreCase(String.valueOf(finding.getSeverity()))).count();
+        long lowFindings = visibleFindings.stream().filter(finding -> "LOW".equalsIgnoreCase(String.valueOf(finding.getSeverity()))).count();
+        long informationalFindings = visibleFindings.stream().filter(finding -> {
+            String severity = String.valueOf(finding.getSeverity()).toUpperCase(Locale.ROOT);
+            return "INFO".equals(severity) || "INFORMATIONAL".equals(severity);
+        }).count();
+
+        long weightedRisk = (criticalFindings * 12) + (highFindings * 8) + (mediumFindings * 5) + (lowFindings * 2) + informationalFindings;
+        int score = (int) Math.max(10, 100 - Math.min(weightedRisk, 90));
         summary.setRiskScore(score);
 
         List<DashboardSummary.FindingTrend> trend = new ArrayList<>();
@@ -106,7 +115,7 @@ public class DashboardController {
 
             trend.add(new DashboardSummary.FindingTrend(
                 day.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
-                findingRepository.findVisibleFindingsInRange(userId, effectiveTargetId, effectiveScanId, true, startOfDay, endOfDay).size()
+                findingRepository.findVisibleFindingsInRange(userId, effectiveTargetId, effectiveScanId, false, startOfDay, endOfDay).size()
             ));
         }
         summary.setFindingsTrend(trend);
@@ -117,7 +126,7 @@ public class DashboardController {
     }
 
     private Optional<User> resolveCurrentUser(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
+        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
             return Optional.empty();
         }
 

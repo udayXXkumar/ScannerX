@@ -12,10 +12,16 @@ public class FindingService {
 
     private final FindingRepository findingRepository;
     private final FindingSeverityService findingSeverityService;
+    private final FindingEnrichmentService findingEnrichmentService;
 
-    public FindingService(FindingRepository findingRepository, FindingSeverityService findingSeverityService) {
+    public FindingService(
+            FindingRepository findingRepository,
+            FindingSeverityService findingSeverityService,
+            FindingEnrichmentService findingEnrichmentService
+    ) {
         this.findingRepository = findingRepository;
         this.findingSeverityService = findingSeverityService;
+        this.findingEnrichmentService = findingEnrichmentService;
     }
 
     public Finding saveOrUpdateFinding(Finding newFinding) {
@@ -46,10 +52,16 @@ public class FindingService {
             sameScanFinding.setLastSeenAt(LocalDateTime.now());
             sameScanFinding.setSeverity(newFinding.getSeverity());
             sameScanFinding.setDescription(newFinding.getDescription());
+            sameScanFinding.setEvidenceData(newFinding.getEvidenceData());
             sameScanFinding.setToolName(newFinding.getToolName());
             sameScanFinding.setCategory(newFinding.getCategory());
             sameScanFinding.setStatus(newFinding.getStatus());
-            return findingRepository.save(sameScanFinding);
+            sameScanFinding.setRemediation(newFinding.getRemediation());
+            sameScanFinding.setCweId(newFinding.getCweId());
+            sameScanFinding.setOwaspCategory(newFinding.getOwaspCategory());
+            Finding savedFinding = findingRepository.save(sameScanFinding);
+            findingEnrichmentService.requestEnrichment(savedFinding);
+            return savedFinding;
         }
 
         if (!existingFindings.isEmpty()) {
@@ -68,6 +80,8 @@ public class FindingService {
             newFinding.setFirstSeenAt(LocalDateTime.now());
         }
         newFinding.setLastSeenAt(LocalDateTime.now());
-        return findingRepository.save(newFinding);
+        Finding savedFinding = findingRepository.save(newFinding);
+        findingEnrichmentService.requestEnrichment(savedFinding);
+        return savedFinding;
     }
 }

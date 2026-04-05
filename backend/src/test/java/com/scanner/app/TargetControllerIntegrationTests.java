@@ -1,7 +1,9 @@
 package com.scanner.app;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.scanner.app.domain.Target;
 import com.scanner.app.domain.User;
+import com.scanner.app.repository.TargetRepository;
 import com.scanner.app.repository.UserRepository;
 import com.scanner.app.security.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +19,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -34,6 +39,9 @@ class TargetControllerIntegrationTests {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private TargetRepository targetRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -82,5 +90,33 @@ class TargetControllerIntegrationTests {
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Target name must be unique."));
+    }
+
+    @Test
+    void getTargetsDoesNotMutateVerificationFieldsOnRead() throws Exception {
+        User user = userRepository.findByEmail(jwtUtil.extractUsername(authToken)).orElseThrow();
+
+        Target target = new Target();
+        target.setUser(user);
+        target.setName("Legacy Target");
+        target.setBaseUrl("http://127.0.0.1:3000/");
+        target.setDomain("127.0.0.1");
+        target.setVerificationStatus("PENDING");
+        target.setVerificationToken("legacy-token");
+        target.setDefaultTier("FAST");
+        target.setTimeoutsEnabled(Boolean.TRUE);
+        target.setCreatedAt(LocalDateTime.now());
+        target.setUpdatedAt(LocalDateTime.now());
+        Target savedTarget = targetRepository.save(target);
+
+        mockMvc.perform(get("/api/targets")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].verificationStatus").value("PENDING"));
+
+        Target reloadedTarget = targetRepository.findById(savedTarget.getId()).orElseThrow();
+        assertEquals("PENDING", reloadedTarget.getVerificationStatus());
+        assertEquals("legacy-token", reloadedTarget.getVerificationToken());
+        assertNull(reloadedTarget.getLastScanAt());
     }
 }

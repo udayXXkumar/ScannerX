@@ -46,6 +46,27 @@ public class Finding {
     @Column(columnDefinition = "TEXT")
     private String comments;
 
+    @Column(name = "ai_description", columnDefinition = "TEXT")
+    private String aiDescription;
+
+    @Column(name = "exploit_narrative", columnDefinition = "TEXT")
+    private String exploitNarrative;
+
+    @Column(name = "ai_enrichment_status")
+    private String aiEnrichmentStatus;
+
+    @Column(name = "ai_model")
+    private String aiModel;
+
+    @Column(name = "ai_prompt_fingerprint")
+    private String aiPromptFingerprint;
+
+    @Column(name = "ai_enriched_at")
+    private LocalDateTime aiEnrichedAt;
+
+    @Column(name = "ai_enrichment_error", columnDefinition = "TEXT")
+    private String aiEnrichmentError;
+
     private String assignedUser;
     private String cweId;
     private String owaspCategory;
@@ -53,4 +74,29 @@ public class Finding {
     private LocalDateTime firstSeenAt;
     private LocalDateTime lastSeenAt;
     private LocalDateTime createdAt;
+
+    public String getAiEnrichmentStatus() {
+        if (hasAiEnrichmentContent()) {
+            return "COMPLETED";
+        }
+
+        return aiEnrichmentStatus;
+    }
+
+    public String getAiEnrichmentError() {
+        if (hasAiEnrichmentContent()) {
+            return null;
+        }
+
+        return aiEnrichmentError;
+    }
+
+    @JsonIgnore
+    public boolean hasAiEnrichmentContent() {
+        return hasText(aiDescription) || hasText(exploitNarrative);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
 }

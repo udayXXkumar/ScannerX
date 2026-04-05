@@ -13,6 +13,17 @@ POSTGRES_PORT="5433"
 
 mkdir -p "$RUN_DIR"
 
+load_local_env_file() {
+  local env_file="$1"
+
+  if [[ -f "$env_file" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+  fi
+}
+
 port_in_use() {
   local port="$1"
   ss -ltn "( sport = :$port )" | awk 'NR > 1 { print }' | grep -q LISTEN
@@ -136,6 +147,9 @@ start_frontend() {
   tail -n 40 "$RUN_DIR/frontend.log" || true
   exit 1
 }
+
+load_local_env_file "$ROOT_DIR/.env.local"
+load_local_env_file "$BACKEND_DIR/.env.local"
 
 ensure_postgres
 start_backend

@@ -1,40 +1,48 @@
 import { useMemo, useState } from 'react'
 import { CheckCircle2, Clock, Play, Plus, Search, Trash2, XCircle } from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { deleteScan, getScans, resumeScan } from '../../api/scanApi'
+import { deleteScan, resumeScan } from '../../api/scanApi'
+import { isConfirmedUnauthorizedError } from '../../api/axios'
 import StatusBadge from '../../components/ui/StatusBadge'
 import {
+  getScanBaseUrl,
   getScanDisplayName,
   isActiveScanStatus,
   isCompletedScan,
   getScanTierLabel,
   normalizeScanStatus,
 } from '../../lib/scanUtils'
+import { useWorkspaceScans } from '../../hooks/useWorkspaceScans'
+import {
+  invalidateWorkspaceData,
+  mergeScanIntoWorkspace,
+  removeScanFromWorkspace,
+} from '../../lib/workspaceCache'
+import { workspaceQueryKeys } from '../../lib/workspaceQueryKeys'
 
 const ScansList = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
 
-  const { data: scans = [], isLoading, isError, error } = useQuery({
-    queryKey: ['scans'],
-    queryFn: getScans,
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((scan) => isActiveScanStatus(scan.status)) ? 3000 : false,
-  })
+  const { scans, isLoading, isError, error } = useWorkspaceScans()
+  const showScansErrorState = isError && scans.length === 0
 
   const deleteMutation = useMutation({
     mutationFn: deleteScan,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['findings'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'unreadCount'] })
-      queryClient.invalidateQueries({ queryKey: ['reportSummary'] })
+    onSuccess: (_, scanId) => {
+      removeScanFromWorkspace(queryClient, scanId)
+      invalidateWorkspaceData(queryClient, {
+        includeFindings: true,
+        includeReports: true,
+        includeNotifications: true,
+      })
     },
     onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
       window.alert(getErrorMessage(error, 'Unable to delete this scan right now.'))
     },
   })
@@ -42,13 +50,16 @@ const ScansList = () => {
   const resumeMutation = useMutation({
     mutationFn: resumeScan,
     onSuccess: (scan) => {
-      queryClient.invalidateQueries({ queryKey: ['scans'] })
-      queryClient.invalidateQueries({ queryKey: ['targets'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
-      queryClient.invalidateQueries({ queryKey: ['reportSummary'] })
+      mergeScanIntoWorkspace(queryClient, scan)
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scans })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
       navigate(`/scans/${scan.id}`)
     },
     onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) {
+        return
+      }
       window.alert(getErrorMessage(error, 'Unable to resume this scan right now.'))
     },
   })
@@ -112,6 +123,15 @@ const ScansList = () => {
       </div>
 
       <div className="table-shell">
+        {isError && scans.length > 0 ? (
+          <div className="border-b border-rose-500/16 bg-rose-500/8 px-4 py-3">
+            <div className="flex items-center gap-3 text-sm text-rose-100">
+              <XCircle className="h-4 w-4 shrink-0 text-rose-300" />
+              <span>Latest scan status refresh failed. Showing the most recent cached scan activity.</span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="table-toolbar">
           <div className="search-control w-full max-w-sm">
             <Search className="mr-2 h-4 w-4 text-slate-400" />
@@ -128,7 +148,7 @@ const ScansList = () => {
         <div className="table-scroll">
           {isLoading ? (
             <div className="flex h-full items-center justify-center text-slate-400">Loading scans...</div>
-          ) : isError ? (
+          ) : showScansErrorState ? (
             <div className="empty-state">
               <div className="empty-state-panel">
                 <div className="empty-state-icon">
@@ -186,7 +206,7 @@ const ScansList = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="max-w-xs truncate text-sm text-slate-500">{scan.target?.baseUrl || 'No target URL'}</p>
+                        <p className="max-w-xs truncate text-sm text-slate-500">{getScanBaseUrl(scan)}</p>
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <span className="rounded-lg border border-white/8 bg-white/[0.04] px-3 py-1 text-xs font-medium text-slate-300">

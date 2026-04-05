@@ -329,6 +329,13 @@ public class TierScanEngine {
                     return;
                 }
 
+                if (shouldAbortStalledStep(plan, step, context)) {
+                    toolExecutionService.stopActiveProcesses(scan.getId());
+                    forcedResult.compareAndSet(null, buildStalledStepResult(step));
+                    cancelStepFuture(stepFutureRef.get());
+                    return;
+                }
+
                 publishScanProgress(latestScan, context, processedSteps, totalSteps, stage.order(), step, stepStartedAt);
             }, STEP_HEARTBEAT_INTERVAL.toMillis(), STEP_HEARTBEAT_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
 
@@ -398,6 +405,7 @@ public class TierScanEngine {
         return step.retryable()
                 && !result.fatal()
                 && !result.skipped()
+                && !result.timedOut()
                 && !"nuclei-discovered".equals(step.key());
     }
 
@@ -418,6 +426,21 @@ public class TierScanEngine {
             return StepExecutionResult.fatalFailure("Baseline reachability check failed.");
         }
         return StepExecutionResult.nonFatalFailure(step.label() + " timed out.", true);
+    }
+
+    private boolean shouldAbortStalledStep(TierPlan plan, PlanStep step, ScanExecutionContext context) {
+        if (step.timeout() != null) {
+            return false;
+        }
+
+        return !context.hasRecentForwardProgress(stallWindowFor(plan.tier(), step));
+    }
+
+    private StepExecutionResult buildStalledStepResult(PlanStep step) {
+        if ("httpx".equals(step.key())) {
+            return StepExecutionResult.fatalFailure("Baseline reachability check stalled in this environment.");
+        }
+        return StepExecutionResult.nonFatalFailure(step.label() + " stalled and was stopped to keep the scan moving.", true);
     }
 
     private void finishCompleted(Long scanId, ScanExecutionContext context, User notificationUser) {
@@ -787,5 +810,14 @@ public class TierScanEngine {
             case FAST -> Duration.ofSeconds(20);
             case MEDIUM, DEEP -> Duration.ofSeconds(30);
         };
+    }
+
+    private Duration stallWindowFor(ScanTier tier, PlanStep step) {
+        int fallbackSeconds = switch (tier) {
+            case FAST -> 90;
+            case MEDIUM -> 180;
+            case DEEP -> 300;
+        };
+        return Duration.ofSeconds(Math.max(1, step.intSetting("stallWindowSeconds", fallbackSeconds)));
     }
 }

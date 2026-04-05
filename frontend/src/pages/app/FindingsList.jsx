@@ -1,20 +1,26 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Search, X } from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { getFindings, updateFinding } from '../../api/findingApi'
-import { getScans } from '../../api/scanApi'
-import { getTargets } from '../../api/targetApi'
+import { updateFinding } from '../../api/findingApi'
 import { useScanWebSocket } from '../../hooks/useScanWebSocket'
 import SeverityBadge from '../../components/ui/SeverityBadge'
 import StatusBadge from '../../components/ui/StatusBadge'
+import DarkSelect from '../../components/ui/DarkSelect'
 import {
+  getFindingDisplayDescription,
+  getFindingEnrichmentStatus,
+  getFindingExploitNarrative,
+  hasFindingAiContent,
   normalizeFindingSeverity,
   sanitizeFindingDescription,
   sanitizeFindingTitle,
 } from '../../lib/findingUtils'
-import { isActiveScanStatus } from '../../lib/scanUtils'
+import { useWorkspaceFindings } from '../../hooks/useWorkspaceFindings'
+import { useWorkspaceScans } from '../../hooks/useWorkspaceScans'
+import { useWorkspaceTargets } from '../../hooks/useWorkspaceTargets'
+import { workspaceQueryKeys } from '../../lib/workspaceQueryKeys'
 
 const ALL_TARGETS = 'all-targets'
 
@@ -29,28 +35,20 @@ const FindingsList = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const selectedTargetId = searchParams.get('targetId') || ALL_TARGETS
 
-  const { data: targets = [] } = useQuery({
-    queryKey: ['targets'],
-    queryFn: getTargets,
-  })
+  const { targets } = useWorkspaceTargets()
 
-  const { data: scans = [] } = useQuery({
-    queryKey: ['scans'],
-    queryFn: getScans,
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((scan) => isActiveScanStatus(scan.status)) ? 3000 : false,
-  })
-  const activeScan = useMemo(
-    () => scans.find((scan) => isActiveScanStatus(scan.status)),
-    [scans],
-  )
+  const { activeScan, isError: isScanStateError } = useWorkspaceScans()
   const { events } = useScanWebSocket(activeScan?.id)
 
   const targetId = selectedTargetId === ALL_TARGETS ? undefined : Number(selectedTargetId)
 
-  const { data: findings = [], isLoading } = useQuery({
-    queryKey: ['findings', 'list', targetId ?? 'all-targets', 'live-workspace'],
-    queryFn: () => getFindings({ targetId, completedOnly: false }),
+  const { findings, isLoading, isError, error } = useWorkspaceFindings({
+    targetId,
+    completedOnly: false,
+    scope: 'list',
+    queryOptions: {
+      refetchInterval: activeScan ? 3000 : false,
+    },
   })
 
   const mergedFindings = useMemo(() => {
@@ -76,10 +74,18 @@ const FindingsList = () => {
         severity: normalizeFindingSeverity(finding.severity),
         title: sanitizeFindingTitle(finding.title),
         description: sanitizeFindingDescription(finding.description),
+        aiDescription: String(finding.aiDescription || '').trim(),
+        exploitNarrative: String(finding.exploitNarrative || '').trim(),
       }
       const key =
         finding.id ??
-        `${normalizedFinding.title || 'finding'}-${finding.affectedUrl || 'url'}-${finding.createdAt || index}`
+        [
+          finding.target?.id ?? targetId ?? 'all-targets',
+          normalizedFinding.title || 'finding',
+          finding.affectedUrl || 'url',
+          finding.severity || 'unknown',
+          finding.createdAt || index,
+        ].join('|')
 
       findingsByKey.set(key, normalizedFinding)
     })
@@ -90,8 +96,8 @@ const FindingsList = () => {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateFinding(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['findings'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.findings })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
       setIsModalOpen(false)
       setSelectedFinding(null)
     },
@@ -122,7 +128,8 @@ const FindingsList = () => {
       !query ||
       [
         finding.title,
-        finding.description,
+        getFindingDisplayDescription(finding),
+        getFindingExploitNarrative(finding),
         finding.affectedUrl,
         finding.target?.name,
       ]
@@ -161,6 +168,24 @@ const FindingsList = () => {
       </div>
 
       <div className="table-shell min-h-[560px]">
+        {isScanStateError ? (
+          <div className="border-b border-rose-500/16 bg-rose-500/8 px-4 py-3">
+            <div className="flex items-center gap-3 text-sm text-rose-100">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-300" />
+              <span>Live scan state is temporarily unavailable. Historical findings are still available below.</span>
+            </div>
+          </div>
+        ) : null}
+
+        {isError ? (
+          <div className="border-b border-rose-500/16 bg-rose-500/8 px-4 py-3">
+            <div className="flex items-center gap-3 text-sm text-rose-100">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-300" />
+              <span>{getFindingsErrorMessage(error, 'Unable to refresh findings right now. Showing any live findings already received.')}</span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="table-toolbar shrink-0">
           <div className="search-control w-full max-w-xs">
             <Search className="mr-2 h-4 w-4 text-slate-400" />
@@ -173,10 +198,9 @@ const FindingsList = () => {
             />
           </div>
 
-          <select
+          <DarkSelect
             value={selectedTargetId}
-            onChange={(event) => {
-              const nextTargetId = event.target.value
+            onChange={(nextTargetId) => {
               const params = new URLSearchParams(searchParams)
               if (nextTargetId === ALL_TARGETS) {
                 params.delete('targetId')
@@ -185,44 +209,46 @@ const FindingsList = () => {
               }
               setSearchParams(params, { replace: true })
             }}
-            className="filter-control"
-          >
-            <option value={ALL_TARGETS}>All Targets</option>
-            {targets.map((target) => (
-              <option key={target.id} value={String(target.id)}>
-                {target.name}
-              </option>
-            ))}
-          </select>
+            className="min-w-[180px]"
+            options={[
+              { value: ALL_TARGETS, label: 'All Targets' },
+              ...targets.map((target) => ({
+                value: String(target.id),
+                label: target.name,
+              })),
+            ]}
+          />
 
-          <select
+          <DarkSelect
             value={filterSeverity}
-            onChange={(event) => setFilterSeverity(event.target.value)}
-            className="filter-control"
-          >
-            <option value="All">All Severities</option>
-            <option value="CRITICAL">Critical Only</option>
-            <option value="HIGH">High Only</option>
-            <option value="MEDIUM">Medium Only</option>
-            <option value="LOW">Low Only</option>
-          </select>
+            onChange={setFilterSeverity}
+            className="min-w-[140px]"
+            options={SEVERITY_FILTER_OPTIONS}
+          />
 
-          <select
+          <DarkSelect
             value={filterStatus}
-            onChange={(event) => setFilterStatus(event.target.value)}
-            className="filter-control"
-          >
-            <option value="All">All Status</option>
-            <option value="OPEN">Open</option>
-            <option value="IN PROGRESS">In Progress</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="FALSE POSITIVE">False Positive</option>
-          </select>
+            onChange={setFilterStatus}
+            className="min-w-[140px]"
+            options={STATUS_FILTER_OPTIONS}
+          />
         </div>
 
         <div className="table-scroll">
           {isLoading ? (
             <div className="flex h-full items-center justify-center text-slate-400">Loading findings...</div>
+          ) : isError && filteredFindings.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-panel">
+                <div className="empty-state-icon">
+                  <AlertTriangle size={34} />
+                </div>
+                <p className="text-slate-300">Unable to load findings right now.</p>
+                <p className="mt-2 text-sm text-slate-500">
+                  {getFindingsErrorMessage(error, 'Please refresh and try again.')}
+                </p>
+              </div>
+            </div>
           ) : filteredFindings.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-panel">
@@ -311,103 +337,145 @@ const StatCard = ({ label, value, color }) => {
   )
 }
 
-const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, isLoading }) => createPortal(
-  <div className="fixed inset-0 z-[140] overflow-y-auto bg-black/72 p-4 backdrop-blur-md">
-    <div className="flex min-h-full items-center justify-center py-8">
-      <div className="surface-card flex w-full max-w-5xl flex-col overflow-hidden shadow-[0_42px_120px_rgba(0,0,0,0.48)]">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/8 bg-white/[0.03] p-6">
-          <div className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-center gap-3">
-              <SeverityBadge severity={finding.severity} />
-              <span className="font-mono text-sm text-slate-500">#{finding.id}</span>
-            </div>
-            <h2 className="break-words text-2xl font-bold text-white">{sanitizeFindingTitle(finding.title)}</h2>
-            <p className="mt-2 break-all font-mono text-sm text-slate-400">{finding.affectedUrl || finding.target?.baseUrl}</p>
-          </div>
-          <button onClick={onClose} className="shrink-0 text-slate-400 transition-colors hover:text-slate-200">
-            <X size={24} />
-          </button>
-        </div>
+const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, isLoading }) => {
+  const hasAiContent = hasFindingAiContent(finding)
+  const enrichmentStatus = getFindingEnrichmentStatus(finding)
 
-        <div className="grid flex-1 gap-6 overflow-y-auto p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.95fr)]">
-          <div className="space-y-6">
-            <div>
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">Description</h3>
-              <div className="surface-card-inner whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-300">
-                {sanitizeFindingDescription(finding.description) || 'No description available.'}
+  return createPortal(
+    <div className="fixed inset-0 z-[140] overflow-y-auto bg-black/72 p-4 backdrop-blur-md">
+      <div className="flex min-h-full items-center justify-center py-8">
+        <div className="surface-card flex w-full max-w-5xl flex-col overflow-hidden shadow-[0_42px_120px_rgba(0,0,0,0.48)]">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/8 bg-white/[0.03] p-6">
+            <div className="min-w-0">
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <SeverityBadge severity={finding.severity} />
+                <span className="font-mono text-sm text-slate-500">#{finding.id}</span>
               </div>
+              <h2 className="break-words text-2xl font-bold text-white">{sanitizeFindingTitle(finding.title)}</h2>
+              <p className="mt-2 break-all font-mono text-sm text-slate-400">{finding.affectedUrl || finding.target?.baseUrl}</p>
             </div>
+            <button onClick={onClose} className="shrink-0 text-slate-400 transition-colors hover:text-slate-200">
+              <X size={24} />
+            </button>
+          </div>
 
-            {finding.remediation ? (
+          <div className="grid flex-1 gap-6 overflow-y-auto p-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.95fr)]">
+            <div className="space-y-6">
               <div>
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">
-                  Remediation Guidance
-                </h3>
-                <div className="whitespace-pre-wrap break-words rounded-lg border border-prowler-green/20 bg-prowler-green/5 p-4 text-sm text-prowler-green/90">
-                  {finding.remediation}
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">Description</h3>
+                <div className="surface-card-inner whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-300">
+                  {getFindingDisplayDescription(finding) || 'No description available.'}
                 </div>
+                {!hasAiContent && (enrichmentStatus === 'PENDING' || enrichmentStatus === 'PROCESSING') ? (
+                  <p className="mt-3 text-xs text-cyan-200/80">
+                    AI enrichment is generating a clearer analyst summary for this finding.
+                  </p>
+                ) : null}
+                {!hasAiContent && enrichmentStatus === 'FAILED' ? (
+                  <p className="mt-3 text-xs text-amber-200/80">
+                    AI enrichment was unavailable for this finding, so ScannerX is showing the raw scanner description instead.
+                  </p>
+                ) : null}
               </div>
-            ) : null}
-          </div>
 
-          <div className="min-w-0">
-            <form onSubmit={onSubmit} className="surface-card-inner space-y-4 p-4">
-              <h3 className="mb-4 border-b border-white/8 pb-3 font-semibold text-white">Workflow</h3>
+              {getFindingExploitNarrative(finding) ? (
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">
+                    Attacker Perspective And Defensive Guidance
+                  </h3>
+                  <div className="surface-card-inner whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-300">
+                    {getFindingExploitNarrative(finding)}
+                  </div>
+                </div>
+              ) : null}
 
-              <div>
-                <label className="mb-2 block text-xs font-medium text-slate-400">Status</label>
-                <select
-                  value={updateForm.status}
-                  onChange={(event) => setUpdateForm({ ...updateForm, status: event.target.value })}
-                  className="modal-input"
+              {finding.remediation ? (
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">
+                    Remediation Guidance
+                  </h3>
+                  <div className="whitespace-pre-wrap break-words rounded-lg border border-prowler-green/20 bg-prowler-green/5 p-4 text-sm text-prowler-green/90">
+                    {finding.remediation}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="min-w-0">
+              <form onSubmit={onSubmit} className="surface-card-inner space-y-4 p-4">
+                <h3 className="mb-4 border-b border-white/8 pb-3 font-semibold text-white">Workflow</h3>
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-slate-400">Status</label>
+                  <DarkSelect
+                    value={updateForm.status}
+                    onChange={(status) => setUpdateForm({ ...updateForm, status })}
+                    variant="field"
+                    options={STATUS_FILTER_OPTIONS.filter((option) => option.value !== 'All')}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-slate-400">Assigned Analyst</label>
+                  <input
+                    type="text"
+                    value={updateForm.assignedUser}
+                    onChange={(event) => setUpdateForm({ ...updateForm, assignedUser: event.target.value })}
+                    className="modal-input"
+                    placeholder="alice@company.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-slate-400">Comments</label>
+                  <textarea
+                    value={updateForm.comments}
+                    onChange={(event) => setUpdateForm({ ...updateForm, comments: event.target.value })}
+                    className="modal-input resize-none"
+                    rows={4}
+                    placeholder="Add your notes..."
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="surface-button-primary w-full justify-center py-2.5 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="OPEN">Open</option>
-                  <option value="IN PROGRESS">In Progress</option>
-                  <option value="RESOLVED">Resolved</option>
-                  <option value="FALSE POSITIVE">False Positive</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-medium text-slate-400">Assigned Analyst</label>
-                <input
-                  type="text"
-                  value={updateForm.assignedUser}
-                  onChange={(event) => setUpdateForm({ ...updateForm, assignedUser: event.target.value })}
-                  className="modal-input"
-                  placeholder="alice@company.com"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-medium text-slate-400">Comments</label>
-                <textarea
-                  value={updateForm.comments}
-                  onChange={(event) => setUpdateForm({ ...updateForm, comments: event.target.value })}
-                  className="modal-input resize-none"
-                  rows={4}
-                  placeholder="Add your notes..."
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="surface-button-primary w-full justify-center py-2.5 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isLoading ? 'Saving...' : 'Save Changes'}
-              </button>
-            </form>
+                  {isLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </div>,
-  document.body,
-)
+    </div>,
+    document.body,
+  )
+}
 
 function normalizeFindingStatus(status) {
   return String(status || 'OPEN').trim().toUpperCase()
 }
 
+const SEVERITY_FILTER_OPTIONS = [
+  { value: 'All', label: 'All Severities' },
+  { value: 'CRITICAL', label: 'Critical Only' },
+  { value: 'HIGH', label: 'High Only' },
+  { value: 'MEDIUM', label: 'Medium Only' },
+  { value: 'LOW', label: 'Low Only' },
+]
+
+const STATUS_FILTER_OPTIONS = [
+  { value: 'All', label: 'All Status' },
+  { value: 'OPEN', label: 'Open' },
+  { value: 'IN PROGRESS', label: 'In Progress' },
+  { value: 'RESOLVED', label: 'Resolved' },
+  { value: 'FALSE POSITIVE', label: 'False Positive' },
+]
+
 export default FindingsList
+
+function getFindingsErrorMessage(error, fallbackMessage) {
+  return error?.response?.data?.message || error?.message || fallbackMessage
+}

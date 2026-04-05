@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Shield, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 import api from '../../api/axios';
+import DarkSelect from '../../components/ui/DarkSelect';
+import { useWorkspaceScans } from '../../hooks/useWorkspaceScans';
 import { sanitizeFindingTitle } from '../../lib/findingUtils';
 import { getScanRunLabel } from '../../lib/scanUtils';
 
@@ -9,13 +11,7 @@ const ScanComparison = () => {
   const [scan1Id, setScan1Id] = useState('');
   const [scan2Id, setScan2Id] = useState('');
 
-  const { data: scans } = useQuery({
-    queryKey: ['allScans'],
-    queryFn: async () => {
-        const { data } = await api.get('/scans');
-        return data;
-    }
-  });
+  const { scans = [], isError: isScanStateError } = useWorkspaceScans();
 
   const { data: comparison, isFetching: isComparing, refetch } = useQuery({
     queryKey: ['compareScans', scan1Id, scan2Id],
@@ -45,25 +41,29 @@ const ScanComparison = () => {
       <div className="bg-bg-panel border border-border-subtle rounded-xl p-6">
         <h3 className="text-lg font-medium text-gray-200 mb-4">Select Scans to Compare</h3>
         <p className="text-sm text-gray-400 mb-6">Compare two scans of the same target to understand vulnerability drift (newly discovered vs resolved issues).</p>
+
+        {isScanStateError ? (
+          <div className="mb-6 rounded-xl border border-rose-500/16 bg-rose-500/8 px-4 py-3 text-sm text-rose-100">
+            Scan history is temporarily unavailable. Refresh or sign in again before comparing scans.
+          </div>
+        ) : null}
         
         <div className="flex items-center space-x-4 mb-6">
-            <select
+            <DarkSelect
               value={scan1Id}
-              onChange={(e) => setScan1Id(e.target.value)}
-              className="bg-bg-base border border-border-subtle rounded-lg px-4 py-2 text-sm text-gray-200 focus:border-primary flex-1"
-            >
-                <option value="">Select Base Scan (Older)</option>
-                {scans?.map(s => <option key={s.id} value={s.id}>{getScanRunLabel(s)}</option>)}
-            </select>
+              onChange={setScan1Id}
+              className="flex-1"
+              placeholder="Select Base Scan (Older)"
+              options={scans.map((scan) => ({ value: String(scan.id), label: getScanRunLabel(scan) }))}
+            />
             <ArrowRight className="w-5 h-5 text-gray-400" />
-            <select
+            <DarkSelect
               value={scan2Id}
-              onChange={(e) => setScan2Id(e.target.value)}
-              className="bg-bg-base border border-border-subtle rounded-lg px-4 py-2 text-sm text-gray-200 focus:border-primary flex-1"
-            >
-                <option value="">Select Target Scan (Newer)</option>
-                {scans?.map(s => <option key={s.id} value={s.id}>{getScanRunLabel(s)}</option>)}
-            </select>
+              onChange={setScan2Id}
+              className="flex-1"
+              placeholder="Select Target Scan (Newer)"
+              options={scans.map((scan) => ({ value: String(scan.id), label: getScanRunLabel(scan) }))}
+            />
             <button 
                 onClick={handleCompare}
                 disabled={!scan1Id || !scan2Id || scan1Id === scan2Id}

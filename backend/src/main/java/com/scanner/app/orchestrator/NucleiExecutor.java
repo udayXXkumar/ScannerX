@@ -275,10 +275,10 @@ public class NucleiExecutor extends AbstractFindingExecutor {
                 || normalizedUrl.endsWith(".map");
     }
 
-    private Duration resolveBatchTimeout(PlanStep step, long deadlineNanos) {
+    Duration resolveBatchTimeout(PlanStep step, long deadlineNanos) {
         Duration configuredBatchTimeout = Duration.ofSeconds(Math.max(5, step.intSetting("batchTimeoutSeconds", 30)));
         if (deadlineNanos == Long.MAX_VALUE) {
-            return configuredBatchTimeout;
+            return null;
         }
 
         long remainingNanos = deadlineNanos - System.nanoTime();
