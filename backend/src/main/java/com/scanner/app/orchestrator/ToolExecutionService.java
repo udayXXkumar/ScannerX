@@ -30,6 +30,9 @@ import java.util.function.Consumer;
 public class ToolExecutionService {
 
     private static final Logger log = LoggerFactory.getLogger(ToolExecutionService.class);
+    private static final Map<String, List<String>> EXECUTABLE_ALIASES = Map.of(
+            "httpx", List.of("httpx-toolkit")
+    );
 
     private final Map<String, Optional<String>> executableCache = new ConcurrentHashMap<>();
     private final Map<Long, Set<Process>> activeProcesses = new ConcurrentHashMap<>();
@@ -248,6 +251,22 @@ public class ToolExecutionService {
     }
 
     private Optional<String> findExecutable(String candidate) {
+        Optional<String> resolved = findExecutableByName(candidate);
+        if (resolved.isPresent()) {
+            return resolved;
+        }
+
+        for (String alias : EXECUTABLE_ALIASES.getOrDefault(candidate, List.of())) {
+            resolved = findExecutableByName(alias);
+            if (resolved.isPresent()) {
+                return resolved;
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> findExecutableByName(String candidate) {
         Path directPath = Path.of(candidate);
         if (directPath.isAbsolute() || candidate.contains("/")) {
             return Files.isExecutable(directPath) ? Optional.of(directPath.toString()) : Optional.empty();
