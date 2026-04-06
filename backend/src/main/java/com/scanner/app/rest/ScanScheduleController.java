@@ -69,6 +69,15 @@ public class ScanScheduleController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> cancelSchedule(@PathVariable Long id, Authentication authentication) {
+        return cancelScheduleInternal(id, authentication);
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancelScheduleAlias(@PathVariable Long id, Authentication authentication) {
+        return cancelScheduleInternal(id, authentication);
+    }
+
+    private ResponseEntity<?> cancelScheduleInternal(Long id, Authentication authentication) {
         Optional<User> currentUser = resolveCurrentUser(authentication);
         if (currentUser.isEmpty()) {
             return ResponseEntity.status(401).build();

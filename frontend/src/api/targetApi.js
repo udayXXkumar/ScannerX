@@ -16,6 +16,6 @@ export const updateTarget = async (id, target) => {
 };
 
 export const deleteTarget = async (id) => {
-  const { data } = await api.delete(`/targets/${id}`);
+  const { data } = await api.post(`/targets/${id}/delete`);
   return data;
 };

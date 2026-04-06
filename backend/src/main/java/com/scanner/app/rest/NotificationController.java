@@ -63,6 +63,15 @@ public class NotificationController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteNotification(@PathVariable Long id, Authentication authentication) {
+        return deleteNotificationInternal(id, authentication);
+    }
+
+    @PostMapping("/{id}/delete")
+    public ResponseEntity<Void> deleteNotificationAlias(@PathVariable Long id, Authentication authentication) {
+        return deleteNotificationInternal(id, authentication);
+    }
+
+    private ResponseEntity<Void> deleteNotificationInternal(Long id, Authentication authentication) {
         Optional<User> currentUser = resolveCurrentUser(authentication);
         if (currentUser.isEmpty()) return ResponseEntity.status(401).build();
         return notificationService.deleteNotification(id, currentUser.get().getId())

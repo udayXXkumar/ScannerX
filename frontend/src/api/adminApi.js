@@ -16,6 +16,6 @@ export const updateUserRole = async (userId, role) => {
 };
 
 export const deleteUser = async (userId) => {
-    const response = await api.delete(`/admin/users/${userId}`);
+    const response = await api.post(`/admin/users/${userId}/delete`);
     return response.data;
 };

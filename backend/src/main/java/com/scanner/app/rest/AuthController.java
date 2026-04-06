@@ -200,6 +200,15 @@ public class AuthController {
 
     @DeleteMapping("/me")
     public ResponseEntity<?> deleteCurrentUser(Authentication authentication) {
+        return deleteCurrentUserInternal(authentication);
+    }
+
+    @PostMapping("/me/delete")
+    public ResponseEntity<?> deleteCurrentUserAlias(Authentication authentication) {
+        return deleteCurrentUserInternal(authentication);
+    }
+
+    private ResponseEntity<?> deleteCurrentUserInternal(Authentication authentication) {
         if (authentication == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }

@@ -11,6 +11,6 @@ export const createSchedule = async (scheduleData) => {
 };
 
 export const cancelSchedule = async (id) => {
-  const { data } = await api.delete(`/schedules/${id}`);
+  const { data } = await api.post(`/schedules/${id}/cancel`);
   return data;
 };

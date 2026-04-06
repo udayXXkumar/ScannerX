@@ -65,6 +65,15 @@ public class AdminController {
 
     @DeleteMapping("/users/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable Long id) {
+        return deleteUserInternal(id);
+    }
+
+    @PostMapping("/users/{id}/delete")
+    public ResponseEntity<?> deleteUserAlias(@PathVariable Long id) {
+        return deleteUserInternal(id);
+    }
+
+    private ResponseEntity<?> deleteUserInternal(Long id) {
         return userRepository.findById(id).map(user -> {
             if (wouldRemoveLastActiveAdmin(user, "DELETED", "DELETED")) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "At least one active admin must remain."));

@@ -271,6 +271,16 @@ public class ScanController {
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<?> deleteScan(@PathVariable Long id, Authentication authentication) {
+        return deleteScanInternal(id, authentication);
+    }
+
+    @PostMapping("/{id}/delete")
+    @Transactional
+    public ResponseEntity<?> deleteScanAlias(@PathVariable Long id, Authentication authentication) {
+        return deleteScanInternal(id, authentication);
+    }
+
+    private ResponseEntity<?> deleteScanInternal(Long id, Authentication authentication) {
         Optional<User> currentUser = resolveCurrentUser(authentication);
         if (currentUser.isEmpty()) {
             return ResponseEntity.status(401).build();

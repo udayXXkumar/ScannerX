@@ -133,6 +133,15 @@ public class TargetController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteTarget(@PathVariable Long id, Authentication authentication) {
+        return deleteTargetInternal(id, authentication);
+    }
+
+    @PostMapping("/{id}/delete")
+    public ResponseEntity<?> deleteTargetAlias(@PathVariable Long id, Authentication authentication) {
+        return deleteTargetInternal(id, authentication);
+    }
+
+    private ResponseEntity<?> deleteTargetInternal(Long id, Authentication authentication) {
         Optional<User> currentUser = resolveCurrentUser(authentication);
         if (currentUser.isEmpty()) {
             return ResponseEntity.status(401).build();

@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
@@ -211,5 +212,29 @@ class ScanControllerIntegrationTests {
                 .andExpect(jsonPath("$.name").value(target.getName()));
 
         verify(toolExecutionService).stopActiveProcesses(savedScan.getId());
+    }
+
+    @Test
+    void deleteScanAliasDeletesCancelledScan() throws Exception {
+        Scan cancelledScan = new Scan();
+        cancelledScan.setUser(user);
+        cancelledScan.setTarget(target);
+        cancelledScan.setName(target.getName());
+        cancelledScan.setTier("FAST");
+        cancelledScan.setProfileType("QUICK");
+        cancelledScan.setStatus("CANCELLED");
+        cancelledScan.setProgress(100);
+        cancelledScan.setPauseRequested(Boolean.FALSE);
+        cancelledScan.setResumeStageOrder(1);
+        cancelledScan.setCreatedAt(LocalDateTime.now());
+        cancelledScan.setUpdatedAt(LocalDateTime.now());
+        Scan savedScan = scanRepository.save(cancelledScan);
+
+        mockMvc.perform(post("/api/scans/{id}/delete", savedScan.getId())
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Scan deleted successfully."));
+
+        assertFalse(scanRepository.findById(savedScan.getId()).isPresent());
     }
 }

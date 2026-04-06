@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.equalTo;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -112,5 +113,29 @@ class AuthControllerIntegrationTests {
         mockMvc.perform(get("/api/auth/me")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deleteCurrentUserAliasDeletesAuthenticatedUser() throws Exception {
+        String email = "delete-auth-user-" + System.nanoTime() + "@example.test";
+
+        User user = new User();
+        user.setFullName("Delete Me");
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode("Password123!"));
+        user.setRole("USER");
+        user.setStatus("ACTIVE");
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        String token = jwtUtil.generateToken(email);
+
+        mockMvc.perform(post("/api/auth/me/delete")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Account deleted successfully."));
+
+        assertTrue(userRepository.findByEmail(email).isEmpty());
     }
 }

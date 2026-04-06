@@ -25,7 +25,7 @@ export const createScan = async (scan) => {
 };
 
 export const deleteScan = async (id) => {
-  const { data } = await api.delete(`/scans/${id}`);
+  const { data } = await api.post(`/scans/${id}/delete`);
   return data;
 };
 
