@@ -27,8 +27,4 @@ stop_pid_file() {
 stop_pid_file "frontend" "$RUN_DIR/frontend.pid"
 stop_pid_file "backend" "$RUN_DIR/backend.pid"
 
-if command -v docker >/dev/null 2>&1; then
-  docker compose -f "$ROOT_DIR/docker-compose.dev.yml" stop db >/dev/null 2>&1 || true
-fi
-
-echo "Requested stop for stored ScannerX processes."
+echo "Requested stop for stored ScannerX frontend and backend processes."

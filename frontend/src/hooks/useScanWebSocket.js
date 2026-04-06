@@ -12,6 +12,17 @@ const buildSockJsUrl = () => {
   return `${configuredWebSocketBaseUrl.replace(/\/+$/, '')}/ws/scans`;
 };
 
+const ensureSockJsBrowserGlobals = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  // sockjs-client still expects a Node-style global in some browser bundles.
+  if (typeof globalThis.global === 'undefined') {
+    globalThis.global = window;
+  }
+};
+
 export const useScanWebSocket = (scanId) => {
   const [events, setEvents] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -27,6 +38,7 @@ export const useScanWebSocket = (scanId) => {
 
     const connect = async () => {
       try {
+        ensureSockJsBrowserGlobals();
         const [{ default: SockJS }, { Stomp }] = await Promise.all([
           import('sockjs-client'),
           import('@stomp/stompjs'),

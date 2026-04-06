@@ -4,6 +4,14 @@
 
 This guide helps you test the phone deployment setup locally using Docker with an H2 file-based database. This simulates exactly what will run on your NetHunter phone before deploying there.
 
+The standard local startup path now uses H2 too:
+
+```bash
+./start.sh
+```
+
+Use this guide when you specifically want the Docker-based H2 stack. Use `./start.sh` when you want the normal local frontend/backend workflow without Docker.
+
 **Why test locally first?**
 - Verify the `local` profile configuration works correctly
 - Test H2 file database persistence
@@ -27,6 +35,10 @@ This guide helps you test the phone deployment setup locally using Docker with a
 ```bash
 cd /home/kali/Project/web_scanner_anti
 
+# Standard local H2 run (no Docker)
+./start.sh
+
+# OR start the Docker H2 stack
 # Start the entire stack
 ./docker.h2.sh start
 

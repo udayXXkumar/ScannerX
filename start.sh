@@ -7,9 +7,12 @@ BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 RUN_DIR="$ROOT_DIR/.run"
 
-BACKEND_URL="http://127.0.0.1:8080/actuator/health"
-FRONTEND_URL="http://localhost:5173"
-POSTGRES_PORT="5433"
+BACKEND_PORT="${SCANNERX_BACKEND_PORT:-8080}"
+FRONTEND_PORT="${SCANNERX_FRONTEND_PORT:-5173}"
+BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}/actuator/health"
+FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
+BACKEND_PUBLIC_URL="http://localhost:${BACKEND_PORT}"
+LOCAL_ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:8080,http://localhost:${FRONTEND_PORT},http://127.0.0.1:${FRONTEND_PORT}"
 
 mkdir -p "$RUN_DIR"
 
@@ -53,52 +56,27 @@ show_port_owner() {
   ss -ltnp "( sport = :$port )" || true
 }
 
-ensure_postgres() {
-  if port_in_use "$POSTGRES_PORT"; then
-    echo "Postgres already running on 127.0.0.1:$POSTGRES_PORT"
-    return
-  fi
-
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Postgres is required but Docker is unavailable."
-    echo "Start Postgres on 127.0.0.1:$POSTGRES_PORT, then run this script again."
-    exit 1
-  fi
-
-  echo "Postgres not detected. Trying docker compose..."
-  docker compose -f "$ROOT_DIR/docker-compose.dev.yml" up -d db >/dev/null
-
-  if ! wait_for_port "$POSTGRES_PORT" 60; then
-    echo "Postgres could not be started on 127.0.0.1:$POSTGRES_PORT"
-    exit 1
-  fi
-
-  echo "Postgres is up on 127.0.0.1:$POSTGRES_PORT"
-}
-
 start_backend() {
   if http_up "$BACKEND_URL"; then
     echo "Backend already running at $BACKEND_URL"
     return
   fi
 
-  if port_in_use 8080; then
-    echo "Port 8080 is already in use by another process."
-    show_port_owner 8080
+  if port_in_use "$BACKEND_PORT"; then
+    echo "Port $BACKEND_PORT is already in use by another process."
+    show_port_owner "$BACKEND_PORT"
     exit 1
   fi
 
   echo "Starting backend..."
   (
     cd "$BACKEND_DIR"
+    mkdir -p data
     nohup env \
-      SPRING_PROFILES_ACTIVE=postgres \
+      SPRING_PROFILES_ACTIVE=local \
+      PORT="$BACKEND_PORT" \
       APP_QUEUE_MODE=local \
-      DB_HOST=127.0.0.1 \
-      DB_PORT="$POSTGRES_PORT" \
-      DB_NAME=scannerx \
-      DB_USERNAME=scannerx \
-      DB_PASSWORD=scannerx \
+      APP_CORS_ALLOWED_ORIGINS="${APP_CORS_ALLOWED_ORIGINS:-$LOCAL_ALLOWED_ORIGINS}" \
       ./mvnw spring-boot:run >"$RUN_DIR/backend.log" 2>&1 &
     echo $! >"$RUN_DIR/backend.pid"
   )
@@ -122,16 +100,19 @@ start_frontend() {
     return
   fi
 
-  if port_in_use 5173; then
-    echo "Port 5173 is already in use by another process."
-    show_port_owner 5173
+  if port_in_use "$FRONTEND_PORT"; then
+    echo "Port $FRONTEND_PORT is already in use by another process."
+    show_port_owner "$FRONTEND_PORT"
     exit 1
   fi
 
   echo "Starting frontend..."
   (
     cd "$FRONTEND_DIR"
-    nohup npm run dev -- --host 0.0.0.0 --port 5173 --strictPort >"$RUN_DIR/frontend.log" 2>&1 &
+    nohup env \
+      VITE_API_BASE_URL="${VITE_API_BASE_URL:-$BACKEND_PUBLIC_URL/api}" \
+      VITE_WS_BASE_URL="${VITE_WS_BASE_URL:-$BACKEND_PUBLIC_URL}" \
+      npm run dev -- --host 0.0.0.0 --port "$FRONTEND_PORT" --strictPort >"$RUN_DIR/frontend.log" 2>&1 &
     echo $! >"$RUN_DIR/frontend.pid"
   )
 
@@ -151,15 +132,15 @@ start_frontend() {
 load_local_env_file "$ROOT_DIR/.env.local"
 load_local_env_file "$BACKEND_DIR/.env.local"
 
-ensure_postgres
 start_backend
 start_frontend
 
 echo
 echo "ScannerX is running:"
-echo "  Frontend: http://localhost:5173"
-echo "  Backend : http://127.0.0.1:8080"
-echo "  Postgres: psql postgresql://scannerx:scannerx@127.0.0.1:$POSTGRES_PORT/scannerx"
+echo "  Frontend: http://localhost:$FRONTEND_PORT"
+echo "  Backend : http://127.0.0.1:$BACKEND_PORT"
+echo "  H2 DB   : $BACKEND_DIR/data/scannerx.mv.db"
+echo "  H2 Console: http://127.0.0.1:$BACKEND_PORT/h2-console"
 echo
 echo "Logs:"
 echo "  tail -f $RUN_DIR/backend.log"
