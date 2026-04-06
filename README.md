@@ -282,5 +282,3 @@ ScannerX is a security tool. Only scan assets that you own or are explicitly aut
 ## Author
 
 Built and maintained by [@udayXXkumar](https://github.com/udayXXkumar).
-
-If you use ScannerX as a portfolio project, include screenshots and the live frontend link so reviewers can immediately understand the product surface and the quality of the operational workflow.
