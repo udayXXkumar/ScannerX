@@ -9,7 +9,7 @@
 
 ScannerX is a modern web security scanning workspace for managing targets, launching tiered scans, monitoring live activity, triaging findings, comparing runs, and exporting reports from a single interface. The project combines a React/Vite frontend with a Spring Boot backend, live WebSocket updates, a host-based scanner toolchain, and optional AI-assisted finding enrichment.
 
-**Live demo:** [https://scannerx.vercel.app](https://scannerx.vercel.app)
+**Visit :** [https://scannerx.vercel.app](https://scannerx.vercel.app)
 
 > The public frontend is stable. Authenticated features and scan execution depend on backend availability, which may vary because the backend can be hosted separately from the Vercel deployment.
 
@@ -47,18 +47,6 @@ ScannerX is a modern web security scanning workspace for managing targets, launc
 | Notifications | Review unread and historical operational events. |
 | Profile | Update account information and session-level user settings. |
 | Admin | Role-gated administration surface for privileged users. |
-
-## Screenshots
-
-Add production screenshots under `docs/screenshots/` when ready and replace the placeholder paths below.
-
-| Screen | Suggested asset | What to show |
-| --- | --- | --- |
-| Dashboard | `docs/screenshots/dashboard.png` | Threat summary cards, live overview, and recent findings. |
-| Targets | `docs/screenshots/targets.png` | Target inventory, scan status, and launch actions. |
-| Scan Detail | `docs/screenshots/scan-detail.png` | Real-time scan activity, progress, and live findings feed. |
-| Findings | `docs/screenshots/findings.png` | Findings portfolio, filters, and AI-enriched detail modal. |
-| Reports | `docs/screenshots/reports.png` | Completed-run summary and export/reporting surface. |
 
 ## Architecture Overview
 
