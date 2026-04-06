@@ -9,6 +9,27 @@ const apiBaseUrl = configuredApiBaseUrl
   ? configuredApiBaseUrl.replace(/\/+$/, '')
   : '/api';
 
+const buildNgrokBypassHeaders = (baseUrl) => {
+  if (!baseUrl || baseUrl.startsWith('/')) {
+    return {};
+  }
+
+  try {
+    const { hostname } = new URL(baseUrl);
+    if (!hostname.includes('ngrok')) {
+      return {};
+    }
+
+    return {
+      'ngrok-skip-browser-warning': 'true',
+    };
+  } catch {
+    return {};
+  }
+};
+
+const ngrokBypassHeaders = buildNgrokBypassHeaders(apiBaseUrl);
+
 const createAuthSessionVersion = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -35,12 +56,14 @@ const api = axios.create({
   baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
+    ...ngrokBypassHeaders,
   },
 });
 const authConfirmationClient = axios.create({
   baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
+    ...ngrokBypassHeaders,
   },
 });
 
