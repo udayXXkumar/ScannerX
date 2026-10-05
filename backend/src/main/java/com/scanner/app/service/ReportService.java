@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -55,11 +56,14 @@ public class ReportService {
         sb.append("Medium,").append(report.getSummary().getMedium()).append("\n");
         sb.append("Low,").append(report.getSummary().getLow()).append("\n");
         sb.append("Info,").append(report.getSummary().getInfo()).append("\n\n");
-        sb.append("Type,Severity,Endpoint,Description,Exploit Narrative,Evidence,Source\n");
+        sb.append("Type,Severity,AI Severity,Priority Score,Is Duplicate,Endpoint,Description,Exploit Narrative,Evidence,Source\n");
 
         for (NormalizedScanReport.FindingEntry finding : report.getFindings()) {
             sb.append(escapeCsv(finding.getType())).append(",");
             sb.append(escapeCsv(finding.getSeverity())).append(",");
+            sb.append(escapeCsv(finding.getAiSeverity())).append(",");
+            sb.append(finding.getAiPriorityScore() != null ? finding.getAiPriorityScore() : "").append(",");
+            sb.append(finding.isDuplicate() ? "Yes" : "No").append(",");
             sb.append(escapeCsv(finding.getEndpoint())).append(",");
             sb.append(escapeCsv(finding.getDescription())).append(",");
             sb.append(escapeCsv(finding.getExploitNarrative())).append(",");
@@ -79,12 +83,14 @@ public class ReportService {
 
     public ReportSummaryResponse buildSummary(Long userId, Long targetId, Long scanId) {
         List<Scan> completedScans = scanRepository.findWithContextByUserIdAndStatusOrderByCreatedAtDesc(userId, "COMPLETED");
+        Scan selectedScan = null;
         if (scanId != null) {
-            Scan selectedScan = scanRepository.findWithContextByIdAndUserId(scanId, userId)
+            Scan requestedScan = scanRepository.findWithContextByIdAndUserId(scanId, userId)
                     .filter(scan -> "COMPLETED".equalsIgnoreCase(scan.getStatus()))
                     .orElseThrow(() -> new IllegalArgumentException("Completed scan not found."));
-            completedScans = completedScans.stream().filter(scan -> scan.getId().equals(selectedScan.getId())).toList();
-            targetId = selectedScan.getTarget().getId();
+            selectedScan = requestedScan;
+            completedScans = completedScans.stream().filter(scan -> scan.getId().equals(requestedScan.getId())).toList();
+            targetId = requestedScan.getTarget().getId();
         }
 
         if (targetId != null) {
@@ -136,10 +142,25 @@ public class ReportService {
                             : "Selected target");
         }
         response.setTargetName(resolvedTargetName);
-        response.setScanName(resolvedTargetName);
-        response.setScopeLabel(targetId != null
-                ? response.getTargetName() + " · All completed runs"
-                : "All targets");
+        response.setScanName(selectedScan != null && selectedScan.getName() != null && !selectedScan.getName().isBlank()
+                ? selectedScan.getName().trim()
+                : resolvedTargetName);
+        response.setScopeLabel(selectedScan != null
+                ? response.getTargetName() + " · Scan #" + selectedScan.getId()
+                : targetId != null ? response.getTargetName() + " · All completed runs" : "All targets");
+        if (selectedScan == null && firstScan != null && firstScan.getTarget() != null) {
+            response.setTargetUrl(firstScan.getTarget().getBaseUrl());
+        }
+        if (selectedScan != null) {
+            response.setScanTier(selectedScan.getTier() == null ? selectedScan.getProfileType() : selectedScan.getTier());
+            response.setScanStatus(selectedScan.getStatus());
+            response.setTargetUrl(selectedScan.getTarget() == null ? null : selectedScan.getTarget().getBaseUrl());
+            response.setScanStartedAt(selectedScan.getStartedAt());
+            response.setScanCompletedAt(selectedScan.getCompletedAt());
+            if (selectedScan.getStartedAt() != null && selectedScan.getCompletedAt() != null) {
+                response.setScanDurationSeconds(Duration.between(selectedScan.getStartedAt(), selectedScan.getCompletedAt()).toSeconds());
+            }
+        }
 
         return response;
     }
@@ -159,7 +180,7 @@ public class ReportService {
         sb.append("Medium,").append(summary.getMediumFindings()).append("\n");
         sb.append("Low,").append(summary.getLowFindings()).append("\n");
         sb.append("Informational,").append(summary.getInformationalFindings()).append("\n\n");
-        sb.append("ID,Target Name,Category,Title,Severity,Status,Affected URL,CWE,OWASP,Created At,Description,Exploit Narrative\n");
+        sb.append("ID,Target Name,Category,Title,Severity,AI Severity,Priority Score,Status,Affected URL,Is Duplicate,CWE,OWASP,Created At,Description,Exploit Narrative\n");
 
         for (Finding finding : summary.getFindings()) {
             String targetName = finding.getTarget() != null ? finding.getTarget().getName() : summary.getTargetName();
@@ -168,8 +189,11 @@ public class ReportService {
             sb.append(escapeCsv(finding.getCategory())).append(",");
             sb.append(escapeCsv(finding.getTitle())).append(",");
             sb.append(escapeCsv(finding.getSeverity())).append(",");
+            sb.append(escapeCsv(finding.getAiSeverity())).append(",");
+            sb.append(finding.getAiPriorityScore() != null ? finding.getAiPriorityScore() : "").append(",");
             sb.append(escapeCsv(finding.getStatus())).append(",");
             sb.append(escapeCsv(finding.getAffectedUrl())).append(",");
+            sb.append(finding.getAiDuplicateOfId() != null ? "Yes" : "No").append(",");
             sb.append(escapeCsv(finding.getCweId())).append(",");
             sb.append(escapeCsv(finding.getOwaspCategory())).append(",");
             sb.append(escapeCsv(finding.getCreatedAt() == null ? "" : finding.getCreatedAt().toString())).append(",");
@@ -280,69 +304,265 @@ public class ReportService {
     }
 
     private String generateHtmlForSummary(ReportSummaryResponse summary) {
+        List<Finding> findings = summary.getFindings() == null ? List.of() : summary.getFindings().stream()
+                .sorted((left, right) -> {
+                    int duplicateOrder = Boolean.compare(left.getAiDuplicateOfId() != null, right.getAiDuplicateOfId() != null);
+                    if (duplicateOrder != 0) return duplicateOrder;
+                    int severityOrder = Integer.compare(severityRank(right.getSeverity()), severityRank(left.getSeverity()));
+                    if (severityOrder != 0) return severityOrder;
+                    return Integer.compare(priority(right), priority(left));
+                })
+                .toList();
+
         StringBuilder html = new StringBuilder();
         html.append("<html><head><meta charset='utf-8'/><style>")
-                .append("body{font-family:Arial,sans-serif;background:#0f0d0d;color:#f5f5f5;margin:0;padding:32px;}")
-                .append(".shell{max-width:1100px;margin:0 auto;}")
-                .append(".hero{padding:28px;border:1px solid rgba(255,255,255,.08);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));}")
-                .append(".eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#7be7c0;font-weight:700;}")
-                .append("h1{font-size:34px;margin:12px 0 8px;}")
-                .append("p.meta{color:#a1a1aa;font-size:14px;margin:0;}")
-                .append(".grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:22px;}")
-                .append(".card{padding:18px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:#171313;}")
-                .append(".label{font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.12em;}")
-                .append(".value{font-size:28px;font-weight:700;margin-top:8px;}")
-                .append(".section{margin-top:26px;padding:22px;border:1px solid rgba(255,255,255,.08);border-radius:24px;background:#141110;}")
-                .append("table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px;}")
-                .append("th,td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left;vertical-align:top;}")
-                .append("th{color:#a1a1aa;text-transform:uppercase;font-size:11px;letter-spacing:.08em;}")
-                .append(".severity-critical{color:#ff3f7f;}.severity-high{color:#ff8c62;}.severity-medium{color:#f7c84a;}.severity-low{color:#eae7b0;}.severity-info{color:#9ca3af;}")
-                .append("</style></head><body><div class='shell'>");
+                .append("@page{size:A4;margin:16mm 15mm 18mm;}*{box-sizing:border-box;}")
+                .append("body{font-family:Arial,Helvetica,sans-serif;color:#16212b;background:#fff;font-size:10pt;line-height:1.45;margin:0;}")
+                .append("h1,h2,h3,p{margin-top:0;}h1{font-size:30pt;line-height:1.08;letter-spacing:-.6pt;margin:27mm 0 8mm;color:#102a35;}")
+                .append("h2{font-size:17pt;line-height:1.2;margin:0 0 12pt;color:#132f3a;}h3{font-size:12.5pt;margin:0 0 5pt;color:#142e38;}")
+                .append("p{margin:0 0 8pt;}table{width:100%;border-collapse:collapse;table-layout:fixed;}td,th{vertical-align:top;}")
+                .append(".cover{height:258mm;position:relative;page-break-after:always;padding:2mm 0;}")
+                .append(".brandbar{border-bottom:2px solid #54c6a1;padding:0 0 11pt;}")
+                .append(".brandbar table{margin:0;} .brandmark{display:inline-block;background:#102a35;color:#fff;font-size:11pt;font-weight:bold;text-align:center;padding:7pt 8pt;border-radius:7pt;letter-spacing:-.5pt;}")
+                .append(".brandname{font-size:16pt;font-weight:800;letter-spacing:1.1pt;color:#102a35;padding-left:8pt;vertical-align:middle;}")
+                .append(".brandtag{font-size:8pt;letter-spacing:1.2pt;color:#526773;text-align:right;text-transform:uppercase;vertical-align:middle;}")
+                .append(".cover-kicker,.section-kicker{font-size:8pt;font-weight:bold;letter-spacing:1.6pt;color:#168568;text-transform:uppercase;margin-bottom:8pt;}")
+                .append(".cover-title{font-size:31pt;color:#102a35;font-weight:700;line-height:1.08;margin:30mm 0 8pt;}")
+                .append(".cover-target{font-size:16pt;color:#294853;font-weight:600;overflow-wrap:anywhere;margin-bottom:7pt;}")
+                .append(".cover-scope{font-size:10pt;color:#647681;}")
+                .append(".cover-rule{height:4pt;background:#54c6a1;width:44mm;margin:20mm 0 12mm;}")
+                .append(".cover-meta{border-top:1px solid #d9e3e4;border-bottom:1px solid #d9e3e4;margin-top:15mm;}")
+                .append(".cover-meta td{width:25%;padding:11pt 8pt 12pt 0;border-right:1px solid #d9e3e4;}")
+                .append(".cover-meta td:last-child{border-right:0;padding-left:8pt;}.meta-label{font-size:7.5pt;color:#72828b;letter-spacing:.8pt;text-transform:uppercase;}")
+                .append(".meta-value{font-size:11pt;color:#182e38;font-weight:bold;margin-top:4pt;overflow-wrap:anywhere;}")
+                .append(".cover-footer{position:absolute;bottom:0;left:0;right:0;border-top:1px solid #d9e3e4;padding-top:8pt;color:#71818a;font-size:8pt;}")
+                .append(".section{margin:0 0 18pt;page-break-inside:avoid;}.section-title{border-left:4px solid #54c6a1;padding-left:10pt;margin-bottom:10pt;}")
+                .append(".metrics{border-spacing:6pt 0;margin:0 -6pt 14pt;width:calc(100% + 12pt);}.metric{background:#f3f7f6;border:1px solid #dce8e5;padding:10pt 11pt;width:25%;}")
+                .append(".metric-label{font-size:7.3pt;letter-spacing:.8pt;text-transform:uppercase;color:#647780;}.metric-value{font-size:21pt;line-height:1.15;color:#17313b;font-weight:bold;margin-top:4pt;}")
+                .append(".severity-strip{border-spacing:3pt 0;margin:0 -3pt 15pt;width:calc(100% + 6pt);}.severity-cell{padding:8pt 7pt;background:#f7f9fa;border-top:3px solid #9aa9b0;width:20%;}")
+                .append(".severity-cell .metric-value{font-size:17pt;}.sev-critical{border-color:#d9485f;}.sev-high{border-color:#e87547;}.sev-medium{border-color:#d9a82d;}.sev-low{border-color:#62a989;}.sev-info{border-color:#6c91a6;}")
+                .append(".overview{background:#f4f8f7;border:1px solid #dce8e5;padding:13pt 14pt;margin-bottom:15pt;}.risk-label{font-size:18pt;font-weight:bold;color:#17313b;margin:1pt 0 5pt;}")
+                .append(".muted{color:#60727c;}.small{font-size:8.5pt;}.table{font-size:8.2pt;margin:0 0 16pt;}.table th{background:#edf3f3;color:#425963;font-size:7pt;text-transform:uppercase;letter-spacing:.7pt;padding:7pt 6pt;border-bottom:1px solid #d7e1e2;text-align:left;}")
+                .append(".table td{padding:7pt 6pt;border-bottom:1px solid #e4eaeb;overflow-wrap:anywhere;}.rank{color:#74848b;font-size:8pt;white-space:nowrap;}.finding-title{font-weight:bold;color:#19323b;}.endpoint{color:#617780;font-size:7.5pt;overflow-wrap:anywhere;margin-top:3pt;}")
+                .append(".severity-critical{color:#b8324c;font-weight:bold;}.severity-high{color:#c65c34;font-weight:bold;}.severity-medium{color:#9b7413;font-weight:bold;}.severity-low{color:#337c5d;font-weight:bold;}.severity-info{color:#55798a;font-weight:bold;}")
+                .append(".status{font-size:7.3pt;color:#3c6470;text-transform:uppercase;font-weight:bold;}.priority{font-weight:bold;color:#286f60;white-space:nowrap;}")
+                .append(".details-start{page-break-before:always;}.finding-detail{border:1px solid #dbe4e5;border-left:4px solid #54c6a1;margin:0 0 13pt;padding:12pt 13pt;page-break-inside:avoid;}")
+                .append(".detail-header{margin:0 0 8pt;}.detail-header td:first-child{width:72%;}.detail-header td:last-child{text-align:right;width:28%;}")
+                .append(".detail-id{font-size:7.5pt;color:#71818a;letter-spacing:.5pt;margin-bottom:4pt;}.pill{display:inline-block;padding:3pt 6pt;border:1px solid #d5e1e2;background:#f5f8f8;color:#304952;font-size:7pt;font-weight:bold;text-transform:uppercase;}")
+                .append(".detail-section{margin-top:8pt;}.detail-label{font-size:7pt;font-weight:bold;letter-spacing:.7pt;text-transform:uppercase;color:#536a73;margin-bottom:3pt;}.detail-copy{font-size:8.5pt;color:#273c44;white-space:pre-wrap;overflow-wrap:anywhere;}")
+                .append(".evidence{background:#f5f7f8;border:1px solid #e1e7e8;padding:7pt 8pt;font-size:8pt;color:#334b55;white-space:pre-wrap;overflow-wrap:anywhere;}")
+                .append(".classification{border-top:1px solid #e1e7e8;margin-top:8pt;padding-top:7pt;color:#637780;font-size:7.8pt;}.empty{padding:18pt;background:#f5f8f8;color:#657780;border:1px solid #e1e7e8;}")
+                .append("</style></head><body>");
 
-        html.append("<div class='hero'>")
-                .append("<div class='eyebrow'>ScannerX Report</div>")
-                .append("<h1>").append(escapeHtml(summary.getScopeLabel())).append("</h1>")
-                .append("<p class='meta'>Generated ")
-                .append(summary.getGeneratedAt() == null ? "" : escapeHtml(summary.getGeneratedAt().format(DATE_TIME_FORMAT)))
-                .append("</p>")
-                .append("<div class='grid'>")
-                .append(statCard("Targets", summary.getTotalTargets()))
-                .append(statCard("Scans", summary.getTotalScans()))
-                .append(statCard("Findings", summary.getTotalFindings()))
-                .append(statCard("Open", summary.getOpenFindings()))
-                .append("</div>")
+        String generatedAt = summary.getGeneratedAt() == null ? "" : summary.getGeneratedAt().format(DATE_TIME_FORMAT);
+        String scope = textOr(summary.getScopeLabel(), "Security assessment");
+        String target = textOr(summary.getTargetUrl(), summary.getTargetName());
+        String scanType = textOr(summary.getScanTier(), summary.getScanId() == null
+                ? (summary.getTotalScans() > 1 ? "Multiple scans" : "Portfolio")
+                : "Security scan");
+        String scanPeriod = summary.getScanStartedAt() == null ? "Completed assessment" : summary.getScanStartedAt().format(DATE_TIME_FORMAT);
+        String risk = overallRisk(summary);
+
+        html.append("<div class='cover'>")
+                .append("<div class='brandbar'><table><tr><td><span class='brandmark'>SX</span><span class='brandname'>SCANNERX</span></td><td class='brandtag'>Application security<br/>assessment</td></tr></table></div>")
+                .append("<div class='cover-kicker' style='margin-top:25mm'>Security assessment</div>")
+                .append("<div class='cover-title'>Vulnerability<br/>assessment report</div>")
+                .append("<div class='cover-target'>").append(escapeHtml(target)).append("</div>")
+                .append("<div class='cover-scope'>").append(escapeHtml(scope)).append("</div>")
+                .append("<div class='cover-rule'></div>")
+                .append("<div class='section-kicker'>Assessment at a glance</div>")
+                .append("<div class='risk-label'>Overall risk: ").append(escapeHtml(risk)).append("</div>")
+                .append("<p class='muted'>ScannerX recorded ").append(summary.getTotalFindings()).append(" findings across ")
+                .append(summary.getTotalTargets()).append(summary.getTotalTargets() == 1 ? " target" : " targets")
+                .append(". Findings are listed with scanner severity preserved; AI severity and priority are shown as supplementary analysis.</p>")
+                .append("<table class='cover-meta'><tr>")
+                .append(coverMetaCell("Scan profile", scanType))
+                .append(coverMetaCell("Scans", String.valueOf(summary.getTotalScans())))
+                .append(coverMetaCell("Generated", generatedAt))
+                .append(coverMetaCell("Duration", formatDuration(summary.getScanDurationSeconds())))
+                .append("</tr></table>")
+                .append("<div class='cover-footer'>SCANNERX  ·  CONFIDENTIAL SECURITY REPORT</div>")
                 .append("</div>");
 
-        html.append("<div class='section'><h2>Severity Breakdown</h2><div class='grid'>")
-                .append(statCard("Critical", summary.getCriticalFindings()))
-                .append(statCard("High", summary.getHighFindings()))
-                .append(statCard("Medium", summary.getMediumFindings()))
-                .append(statCard("Low", summary.getLowFindings()))
-                .append("</div></div>");
+        html.append("<div class='section'>")
+                .append("<div class='section-title'><div class='section-kicker'>01 · Executive overview</div><h2>Assessment summary</h2></div>")
+                .append("<div class='overview'><div class='meta-label'>Overall risk rating</div><div class='risk-label'>").append(escapeHtml(risk)).append("</div>")
+                .append("<p class='small muted'>Rating reflects the highest raw scanner severity recorded in this report. AI suggestions are supplemental and do not replace scanner evidence.</p></div>")
+                .append("<table class='metrics'><tr>")
+                .append(metricCell("Findings", summary.getTotalFindings()))
+                .append(metricCell("Open", summary.getOpenFindings()))
+                .append(metricCell("Resolved", summary.getResolvedFindings()))
+                .append(metricCell("Targets", summary.getTotalTargets()))
+                .append("</tr></table>")
+                .append("<table class='severity-strip'><tr>")
+                .append(severityCell("Critical", summary.getCriticalFindings(), "sev-critical"))
+                .append(severityCell("High", summary.getHighFindings(), "sev-high"))
+                .append(severityCell("Medium", summary.getMediumFindings(), "sev-medium"))
+                .append(severityCell("Low", summary.getLowFindings(), "sev-low"))
+                .append(severityCell("Info", summary.getInformationalFindings(), "sev-info"))
+                .append("</tr></table>")
+                .append("<table class='metrics'><tr>")
+                .append(metricCell("Scan profile", scanType))
+                .append(metricCell("Scan status", textOr(summary.getScanStatus(), "Completed")))
+                .append(metricCell("Started", scanPeriod))
+                .append(metricCell("Finished", summary.getScanCompletedAt() == null ? "—" : summary.getScanCompletedAt().format(DATE_TIME_FORMAT)))
+                .append("</tr></table>")
+                .append("</div>");
 
-        html.append("<div class='section'><h2>Findings</h2><table><thead><tr>")
-                .append("<th>Target</th><th>Title</th><th>Severity</th><th>Status</th><th>URL</th><th>Description</th><th>Exploit Narrative</th>")
-                .append("</tr></thead><tbody>");
-
-        for (Finding finding : summary.getFindings()) {
-            String severityClass = severityClass(String.valueOf(finding.getSeverity()));
-            html.append("<tr>")
-                    .append("<td>").append(escapeHtml(finding.getTarget() != null ? finding.getTarget().getName() : summary.getTargetName())).append("</td>")
-                    .append("<td>").append(escapeHtml(String.valueOf(finding.getTitle()))).append("</td>")
-                    .append("<td class='").append(severityClass).append("'>").append(escapeHtml(String.valueOf(finding.getSeverity()))).append("</td>")
-                    .append("<td>").append(escapeHtml(String.valueOf(finding.getStatus()))).append("</td>")
-                    .append("<td>").append(escapeHtml(String.valueOf(finding.getAffectedUrl()))).append("</td>")
-                    .append("<td>").append(escapeHtml(resolveFindingDescription(finding))).append("</td>")
-                    .append("<td>").append(escapeHtml(resolveExploitNarrative(finding))).append("</td>")
-                    .append("</tr>");
+        html.append("<div class='section'>")
+                .append("<div class='section-title'><div class='section-kicker'>02 · Findings register</div><h2>Prioritized findings</h2></div>")
+                .append("<p class='small muted'>Ordered by scanner severity, then AI priority. Duplicate findings remain listed and are marked for analyst review.</p>")
+                .append("<table class='table'><thead><tr><th style='width:7%'>ID</th><th style='width:39%'>Finding and endpoint</th><th style='width:14%'>Severity</th><th style='width:12%'>AI priority</th><th style='width:13%'>Status</th><th style='width:15%'>Target</th></tr></thead><tbody>");
+        for (Finding finding : findings) {
+            html.append(renderFindingRegisterRow(finding, summary));
         }
+        if (findings.isEmpty()) {
+            html.append("<tr><td colspan='6' class='empty'>No findings were recorded for this report scope.</td></tr>");
+        }
+        html.append("</tbody></table></div>")
+                .append("<div class='details-start'>")
+                .append("<div class='section-title'><div class='section-kicker'>03 · Technical appendix</div><h2>Finding details</h2></div>");
 
-        html.append("</tbody></table></div></div></body></html>");
+        if (findings.isEmpty()) {
+            html.append("<div class='empty'>There are no finding details to display.</div>");
+        } else {
+            for (Finding finding : findings) {
+                html.append(renderFindingDetail(finding, summary));
+            }
+        }
+        html.append("</div></body></html>");
         return html.toString();
     }
 
-    private String statCard(String label, long value) {
-        return "<div class='card'><div class='label'>" + escapeHtml(label) + "</div><div class='value'>" + value + "</div></div>";
+    private String coverMetaCell(String label, String value) {
+        return "<td><div class='meta-label'>" + escapeHtml(label) + "</div><div class='meta-value'>" + escapeHtml(textOr(value, "—")) + "</div></td>";
+    }
+
+    private String metricCell(String label, long value) {
+        return "<td class='metric'><div class='metric-label'>" + escapeHtml(label) + "</div><div class='metric-value'>" + value + "</div></td>";
+    }
+
+    private String metricCell(String label, String value) {
+        return "<td class='metric'><div class='metric-label'>" + escapeHtml(label) + "</div><div class='metric-value' style='font-size:11pt'>" + escapeHtml(textOr(value, "—")) + "</div></td>";
+    }
+
+    private String severityCell(String label, long value, String styleClass) {
+        return "<td class='severity-cell " + styleClass + "'><div class='metric-label'>" + escapeHtml(label) + "</div><div class='metric-value'>" + value + "</div></td>";
+    }
+
+    private String renderFindingRegisterRow(Finding finding, ReportSummaryResponse summary) {
+        String severity = textOr(finding.getSeverity(), "INFO");
+        String title = textOr(finding.getTitle(), "Security result");
+        String endpoint = textOr(finding.getAffectedUrl(), summary.getTargetUrl());
+        String target = finding.getTarget() == null ? summary.getTargetName() : finding.getTarget().getName();
+        String aiPriority = finding.getAiPriorityScore() == null ? "—" : finding.getAiPriorityScore() + "/10";
+        if (finding.getAiDuplicateOfId() != null) aiPriority += " · Duplicate";
+        return "<tr><td class='rank'>#" + (finding.getId() == null ? "—" : finding.getId()) + "</td>"
+                + "<td><div class='finding-title'>" + escapeHtml(title) + "</div><div class='endpoint'>" + escapeHtml(textOr(endpoint, "Endpoint not recorded")) + "</div></td>"
+                + "<td class='" + severityClass(severity) + "'>" + escapeHtml(severity) + "</td>"
+                + "<td class='priority'>" + escapeHtml(aiPriority) + "</td>"
+                + "<td class='status'>" + escapeHtml(textOr(finding.getStatus(), "OPEN")) + "</td>"
+                + "<td>" + escapeHtml(textOr(target, "—")) + "</td></tr>";
+    }
+
+    private String renderFindingDetail(Finding finding, ReportSummaryResponse summary) {
+        String severity = textOr(finding.getSeverity(), "INFO");
+        String endpoint = textOr(finding.getAffectedUrl(), summary.getTargetUrl());
+        String target = finding.getTarget() == null ? summary.getTargetName() : finding.getTarget().getName();
+        String description = resolveFindingDescription(finding);
+        String evidence = finding.getEvidenceData();
+        String remediation = finding.getRemediation();
+        String exploitNarrative = resolveExploitNarrative(finding);
+
+        StringBuilder detail = new StringBuilder("<div class='finding-detail'><table class='detail-header'><tr><td>")
+                .append("<div class='detail-id'>FINDING #").append(finding.getId() == null ? "—" : finding.getId()).append("</div>")
+                .append("<h3>").append(escapeHtml(textOr(finding.getTitle(), "Security result"))).append("</h3>")
+                .append("<div class='endpoint'>").append(escapeHtml(textOr(endpoint, "Endpoint not recorded"))).append("</div></td><td>")
+                .append("<span class='pill ").append(severityClass(severity)).append("'>").append(escapeHtml(severity)).append("</span>");
+        if (finding.getAiSeverity() != null && !finding.getAiSeverity().isBlank()) {
+            detail.append("<div class='detail-id' style='margin-top:5pt'>AI assessment: ").append(escapeHtml(finding.getAiSeverity())).append("</div>");
+        }
+        if (finding.getAiPriorityScore() != null) {
+            detail.append("<div class='priority' style='margin-top:4pt'>Priority ").append(finding.getAiPriorityScore()).append("/10</div>");
+        }
+        detail.append("</td></tr></table>")
+                .append("<div class='detail-id'>TARGET · ").append(escapeHtml(textOr(target, "—")))
+                .append(" · STATUS · ").append(escapeHtml(textOr(finding.getStatus(), "OPEN"))).append("</div>");
+
+        if (finding.getAiDuplicateOfId() != null) {
+            detail.append("<div class='detail-section'><span class='pill'>Semantic duplicate of finding #")
+                    .append(finding.getAiDuplicateOfId()).append("</span></div>");
+        }
+        if (description != null && !description.isBlank()) {
+            detail.append(detailSection("Finding summary", description));
+        }
+        if (finding.getAiSeverityReason() != null && !finding.getAiSeverityReason().isBlank()) {
+            detail.append(detailSection("AI severity rationale", finding.getAiSeverityReason()));
+        }
+        if (finding.getAiPriorityReason() != null && !finding.getAiPriorityReason().isBlank()) {
+            detail.append(detailSection("AI priority rationale", finding.getAiPriorityReason()));
+        }
+        if (evidence != null && !evidence.isBlank()) {
+            detail.append("<div class='detail-section'><div class='detail-label'>Evidence</div><div class='evidence'>")
+                    .append(escapeHtml(evidence)).append("</div></div>");
+        }
+        if (remediation != null && !remediation.isBlank()) {
+            detail.append(detailSection("Recommended remediation", remediation));
+        }
+        if (exploitNarrative != null && !exploitNarrative.isBlank()) {
+            detail.append(detailSection("Attacker context and defensive guidance", exploitNarrative));
+        }
+        if ((finding.getCweId() != null && !finding.getCweId().isBlank())
+                || (finding.getOwaspCategory() != null && !finding.getOwaspCategory().isBlank())) {
+            detail.append("<div class='classification'><strong>Classification:</strong> ")
+                    .append(escapeHtml(textOr(finding.getCweId(), "")));
+            if (finding.getCweId() != null && !finding.getCweId().isBlank()
+                    && finding.getOwaspCategory() != null && !finding.getOwaspCategory().isBlank()) {
+                detail.append(" · ");
+            }
+            detail.append(escapeHtml(textOr(finding.getOwaspCategory(), ""))).append("</div>");
+        }
+        return detail.append("</div>").toString();
+    }
+
+    private String detailSection(String label, String content) {
+        return "<div class='detail-section'><div class='detail-label'>" + escapeHtml(label)
+                + "</div><div class='detail-copy'>" + escapeHtml(content) + "</div></div>";
+    }
+
+    private int severityRank(String severity) {
+        return switch (String.valueOf(severity).toUpperCase(Locale.ROOT)) {
+            case "CRITICAL" -> 5;
+            case "HIGH" -> 4;
+            case "MEDIUM", "MODERATE" -> 3;
+            case "LOW" -> 2;
+            default -> 1;
+        };
+    }
+
+    private int priority(Finding finding) {
+        return finding.getAiPriorityScore() == null ? 0 : finding.getAiPriorityScore();
+    }
+
+    private String overallRisk(ReportSummaryResponse summary) {
+        if (summary.getCriticalFindings() > 0) return "Critical";
+        if (summary.getHighFindings() > 0) return "High";
+        if (summary.getMediumFindings() > 0) return "Moderate";
+        if (summary.getLowFindings() > 0) return "Low";
+        if (summary.getInformationalFindings() > 0) return "Informational";
+        return "No findings";
+    }
+
+    private String formatDuration(Long seconds) {
+        if (seconds == null || seconds < 0) return "—";
+        if (seconds < 60) return seconds + " sec";
+        long minutes = seconds / 60;
+        long remainingSeconds = seconds % 60;
+        return remainingSeconds == 0 ? minutes + " min" : minutes + " min " + remainingSeconds + " sec";
+    }
+
+    private String textOr(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private List<Finding> sanitizeFindings(List<Finding> findings) {
@@ -361,6 +581,7 @@ public class ReportService {
             copy.setStatus(finding.getStatus());
             copy.setAffectedUrl(finding.getAffectedUrl());
             copy.setDescription(sanitizeFindingDescription(finding.getDescription()));
+            copy.setEvidenceData(finding.getEvidenceData());
             copy.setAiDescription(sanitizeFindingDescription(finding.getAiDescription()));
             copy.setExploitNarrative(finding.getExploitNarrative());
             copy.setAiEnrichmentStatus(finding.getAiEnrichmentStatus());
@@ -368,6 +589,11 @@ public class ReportService {
             copy.setAiPromptFingerprint(finding.getAiPromptFingerprint());
             copy.setAiEnrichedAt(finding.getAiEnrichedAt());
             copy.setAiEnrichmentError(finding.getAiEnrichmentError());
+            copy.setAiSeverity(finding.getAiSeverity());
+            copy.setAiSeverityReason(finding.getAiSeverityReason());
+            copy.setAiPriorityScore(finding.getAiPriorityScore());
+            copy.setAiPriorityReason(finding.getAiPriorityReason());
+            copy.setAiDuplicateOfId(finding.getAiDuplicateOfId());
             copy.setRemediation(finding.getRemediation());
             copy.setCweId(finding.getCweId());
             copy.setOwaspCategory(finding.getOwaspCategory());

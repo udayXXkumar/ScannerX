@@ -8,6 +8,7 @@ import com.scanner.app.orchestrator.ScanTier;
 import com.scanner.app.orchestrator.TierRuntimeAvailabilityService;
 import com.scanner.app.queue.ScanProducer;
 import com.scanner.app.repository.ScanRepository;
+import com.scanner.app.repository.ScanActivityRepository;
 import com.scanner.app.repository.FindingRepository;
 import com.scanner.app.repository.ScanActivityRepository;
 import com.scanner.app.repository.TargetRepository;
@@ -37,6 +38,7 @@ public class ScanController {
     private final FindingRepository findingRepository;
     private final TargetRepository targetRepository;
     private final NotificationRepository notificationRepository;
+    private final ScanActivityRepository scanActivityRepository;
     private final UserRepository userRepository;
     private final ScanActivityService scanActivityService;
     private final EventPublisher eventPublisher;
@@ -49,6 +51,7 @@ public class ScanController {
             FindingRepository findingRepository,
             TargetRepository targetRepository,
             NotificationRepository notificationRepository,
+            ScanActivityRepository scanActivityRepository,
             UserRepository userRepository,
             ScanActivityService scanActivityService,
             EventPublisher eventPublisher,
@@ -60,6 +63,7 @@ public class ScanController {
         this.findingRepository = findingRepository;
         this.targetRepository = targetRepository;
         this.notificationRepository = notificationRepository;
+        this.scanActivityRepository = scanActivityRepository;
         this.userRepository = userRepository;
         this.scanActivityService = scanActivityService;
         this.eventPublisher = eventPublisher;
@@ -297,8 +301,11 @@ public class ScanController {
             return ResponseEntity.status(409).body(Map.of("message", "Cancel the scan before deleting it."));
         }
 
+        // Clear incoming self-references first so findings can be removed regardless of deletion order.
+        findingRepository.clearDuplicateReferencesToScan(scan.getId());
         findingRepository.deleteByScanId(scan.getId());
-        notificationRepository.deleteByScanIdAndUserId(scan.getId(), currentUser.get().getId());
+        scanActivityRepository.deleteByScanId(scan.getId());
+        notificationRepository.deleteByScanId(scan.getId());
         scanRepository.delete(scan);
         return ResponseEntity.ok(Map.of("message", "Scan deleted successfully."));
     }

@@ -4,6 +4,7 @@ import { requestAppNavigation } from '../lib/appNavigation';
 const AUTH_SESSION_VERSION_KEY = 'authSessionVersion';
 const AUTH_CONFIRMATION_REQUEST_FLAG = '__isAuthConfirmationRequest';
 const AUTH_CONFIRMED_UNAUTHORIZED_FLAG = '__authConfirmedUnauthorized';
+const AUTH_RETRY_AFTER_CONFIRMATION_FLAG = '__retriedAfterAuthConfirmation';
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const apiBaseUrl = configuredApiBaseUrl
   ? configuredApiBaseUrl.replace(/\/+$/, '')
@@ -140,7 +141,7 @@ api.interceptors.request.use(
     config.__authToken = token;
     config.__authSessionVersion = authSessionVersion;
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.set('Authorization', `Bearer ${token}`);
     }
     return config;
   },
@@ -159,18 +160,28 @@ api.interceptors.response.use(
     const requestSessionVersion = error.config?.__authSessionVersion ?? null;
     const currentToken = localStorage.getItem('token');
     const currentSessionVersion = localStorage.getItem(AUTH_SESSION_VERSION_KEY);
-    const shouldHandleUnauthorized =
+    const isProtectedUnauthorized =
       status === 401
       && !isAuthRouteRequest(requestUrl)
       && !isAuthConfirmationRequest(error.config)
       && !currentPath.startsWith('/login')
-      && !currentPath.startsWith('/register')
-      && requestToken
-      && requestSessionVersion
-      && requestToken === currentToken
-      && requestSessionVersion === currentSessionVersion;
+      && !currentPath.startsWith('/register');
 
-    if (!shouldHandleUnauthorized) {
+    if (!isProtectedUnauthorized) {
+      return Promise.reject(error);
+    }
+
+    if (!requestToken || !requestSessionVersion) {
+      clearPersistedAuth();
+      requestAppNavigation({
+        to: '/login',
+        replace: true,
+        reason: 'unauthorized',
+      });
+      return Promise.reject(markConfirmedUnauthorized(error));
+    }
+
+    if (requestToken !== currentToken || requestSessionVersion !== currentSessionVersion) {
       return Promise.reject(error);
     }
 
@@ -192,6 +203,17 @@ api.interceptors.response.use(
         reason: 'unauthorized',
       });
       return Promise.reject(markConfirmedUnauthorized(error));
+    }
+
+    // The token is still valid, so retry once in case the original request reached
+    // a backend instance that had a transient authentication/context failure.
+    if (
+      confirmation.status !== 'unauthorized'
+      && isSameSession
+      && !error.config?.[AUTH_RETRY_AFTER_CONFIRMATION_FLAG]
+    ) {
+      error.config[AUTH_RETRY_AFTER_CONFIRMATION_FLAG] = true;
+      return api.request(error.config);
     }
 
     return Promise.reject(error);

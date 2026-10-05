@@ -1,6 +1,7 @@
 package com.scanner.app.orchestrator;
 
 import com.scanner.app.domain.Scan;
+import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.service.FindingService;
 import com.scanner.app.websocket.EventPublisher;
 import org.springframework.stereotype.Component;
@@ -21,9 +22,10 @@ public class ZapExecutor extends AbstractFindingExecutor {
             FindingService findingService,
             ToolExecutionService toolExecutionService,
             ZapDaemonManager zapDaemonManager,
-            ZapApiClient zapApiClient
+            ZapApiClient zapApiClient,
+            FindingEnrichmentService findingEnrichmentService
     ) {
-        super(findingService, toolExecutionService);
+        super(findingService, toolExecutionService, findingEnrichmentService);
         this.zapDaemonManager = zapDaemonManager;
         this.zapApiClient = zapApiClient;
     }

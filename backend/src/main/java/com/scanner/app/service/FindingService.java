@@ -12,16 +12,12 @@ public class FindingService {
 
     private final FindingRepository findingRepository;
     private final FindingSeverityService findingSeverityService;
-    private final FindingEnrichmentService findingEnrichmentService;
-
     public FindingService(
             FindingRepository findingRepository,
-            FindingSeverityService findingSeverityService,
-            FindingEnrichmentService findingEnrichmentService
+            FindingSeverityService findingSeverityService
     ) {
         this.findingRepository = findingRepository;
         this.findingSeverityService = findingSeverityService;
-        this.findingEnrichmentService = findingEnrichmentService;
     }
 
     public Finding saveOrUpdateFinding(Finding newFinding) {
@@ -59,9 +55,7 @@ public class FindingService {
             sameScanFinding.setRemediation(newFinding.getRemediation());
             sameScanFinding.setCweId(newFinding.getCweId());
             sameScanFinding.setOwaspCategory(newFinding.getOwaspCategory());
-            Finding savedFinding = findingRepository.save(sameScanFinding);
-            findingEnrichmentService.requestEnrichment(savedFinding);
-            return savedFinding;
+            return findingRepository.save(sameScanFinding);
         }
 
         if (!existingFindings.isEmpty()) {
@@ -80,8 +74,6 @@ public class FindingService {
             newFinding.setFirstSeenAt(LocalDateTime.now());
         }
         newFinding.setLastSeenAt(LocalDateTime.now());
-        Finding savedFinding = findingRepository.save(newFinding);
-        findingEnrichmentService.requestEnrichment(savedFinding);
-        return savedFinding;
+        return findingRepository.save(newFinding);
     }
 }

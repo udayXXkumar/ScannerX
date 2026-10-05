@@ -9,7 +9,7 @@ import com.scanner.app.repository.ScanRepository;
 import com.scanner.app.repository.TargetRepository;
 import com.scanner.app.repository.UserRepository;
 import com.scanner.app.service.FindingEnrichmentService;
-import com.scanner.app.service.HuggingFaceInferenceClient;
+import com.scanner.app.service.AiInferenceClient;
 import com.scanner.app.websocket.EventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +52,7 @@ class FindingEnrichmentServiceIntegrationTests {
     private FindingRepository findingRepository;
 
     @MockitoBean
-    private HuggingFaceInferenceClient huggingFaceInferenceClient;
+    private AiInferenceClient huggingFaceInferenceClient;
 
     @MockitoBean
     private EventPublisher eventPublisher;
@@ -105,9 +105,14 @@ class FindingEnrichmentServiceIntegrationTests {
     @Test
     void enrichFindingNowPersistsAiFieldsAndPublishesEvent() {
         when(huggingFaceInferenceClient.enrichFinding(any()))
-                .thenReturn(new HuggingFaceInferenceClient.FindingAiEnrichmentResult(
+                .thenReturn(new AiInferenceClient.FindingAiEnrichmentResult(
                         "ScannerX AI summary",
                         "An attacker could abuse this weakness when exposed input reaches a vulnerable code path, which can affect confidentiality or integrity.",
+                        "HIGH",
+                        "Reason for HIGH severity",
+                        8,
+                        "Reason for priority",
+                        -1,
                         "Qwen/Qwen2.5-7B-Instruct"
                 ));
 

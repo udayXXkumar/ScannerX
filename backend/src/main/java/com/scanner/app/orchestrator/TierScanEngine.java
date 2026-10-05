@@ -6,10 +6,12 @@ import com.scanner.app.domain.User;
 import com.scanner.app.repository.ScanRepository;
 import com.scanner.app.repository.UserRepository;
 import com.scanner.app.service.NotificationService;
+import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.websocket.EventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -50,7 +52,40 @@ public class TierScanEngine {
     private final TierRuntimeAvailabilityService tierRuntimeAvailabilityService;
     private final ZapDaemonManager zapDaemonManager;
     private final ObjectMapper executionContextMapper;
+    private final FindingEnrichmentService findingEnrichmentService;
 
+    @Autowired
+    public TierScanEngine(
+            ScanRepository scanRepository,
+            TierPlanRegistry tierPlanRegistry,
+            List<ToolStepExecutor> executors,
+            ToolExecutionService toolExecutionService,
+            LightCrawlerService lightCrawlerService,
+            NotificationService notificationService,
+            UserRepository userRepository,
+            EventPublisher eventPublisher,
+            NormalizedReportService normalizedReportService,
+            TierRuntimeAvailabilityService tierRuntimeAvailabilityService,
+            ZapDaemonManager zapDaemonManager,
+            ObjectMapper objectMapper,
+            FindingEnrichmentService findingEnrichmentService
+    ) {
+        this.scanRepository = scanRepository;
+        this.tierPlanRegistry = tierPlanRegistry;
+        this.executors = executors;
+        this.toolExecutionService = toolExecutionService;
+        this.lightCrawlerService = lightCrawlerService;
+        this.notificationService = notificationService;
+        this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
+        this.normalizedReportService = normalizedReportService;
+        this.tierRuntimeAvailabilityService = tierRuntimeAvailabilityService;
+        this.zapDaemonManager = zapDaemonManager;
+        this.executionContextMapper = objectMapper.copy().findAndRegisterModules();
+        this.findingEnrichmentService = findingEnrichmentService;
+    }
+
+    /** Compatibility constructor for focused engine tests that do not exercise AI processing. */
     public TierScanEngine(
             ScanRepository scanRepository,
             TierPlanRegistry tierPlanRegistry,
@@ -65,18 +100,9 @@ public class TierScanEngine {
             ZapDaemonManager zapDaemonManager,
             ObjectMapper objectMapper
     ) {
-        this.scanRepository = scanRepository;
-        this.tierPlanRegistry = tierPlanRegistry;
-        this.executors = executors;
-        this.toolExecutionService = toolExecutionService;
-        this.lightCrawlerService = lightCrawlerService;
-        this.notificationService = notificationService;
-        this.userRepository = userRepository;
-        this.eventPublisher = eventPublisher;
-        this.normalizedReportService = normalizedReportService;
-        this.tierRuntimeAvailabilityService = tierRuntimeAvailabilityService;
-        this.zapDaemonManager = zapDaemonManager;
-        this.executionContextMapper = objectMapper.copy().findAndRegisterModules();
+        this(scanRepository, tierPlanRegistry, executors, toolExecutionService, lightCrawlerService,
+                notificationService, userRepository, eventPublisher, normalizedReportService,
+                tierRuntimeAvailabilityService, zapDaemonManager, objectMapper, null);
     }
 
     public void runScan(Long scanId) {
@@ -453,6 +479,16 @@ public class TierScanEngine {
             return;
         }
 
+        boolean aiEnrichmentActive = findingEnrichmentService != null && findingEnrichmentService.isReadyToRun();
+        if (aiEnrichmentActive) {
+            scan.setProgress(90);
+            scan.setUpdatedAt(LocalDateTime.now());
+            saveScan(scan);
+            publishAiEnrichmentProgress(scanId, context, 0, 1);
+            eventPublisher.publishScanEvent(scanId, "LOG", "[ai] Waiting for in-flight enrichment and processing any remaining findings.");
+            findingEnrichmentService.enrichScanFindings(scanId, ScanTier.fromTargetValue(scan.getTier()),
+                    (completed, total) -> publishAiEnrichmentProgress(scanId, context, completed, total));
+        }
         NormalizedScanReport report = persistNormalizedReportSafely(scanId, scan);
         scan.setStatus("COMPLETED");
         scan.setProgress(100);
@@ -522,7 +558,7 @@ public class TierScanEngine {
     }
 
     private void updateProgress(Scan scan, int processedSteps, int totalSteps, Integer stageOrder, PlanStep step, LocalDateTime stepStartedAt) {
-        scan.setProgress(Math.min(100, (int) Math.round((processedSteps * 100.0) / Math.max(totalSteps, 1))));
+        scan.setProgress(Math.min(90, (int) Math.round((processedSteps * 90.0) / Math.max(totalSteps, 1))));
         scan.setUpdatedAt(LocalDateTime.now());
         saveScan(scan);
         publishScanProgress(scan, loadExecutionContext(scan), processedSteps, totalSteps, stageOrder, step, stepStartedAt);
@@ -621,6 +657,7 @@ public class TierScanEngine {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", scan.getStatus());
         payload.put("progress", scan.getProgress() == null ? 0 : scan.getProgress());
+        payload.put("pipelinePhase", "SCANNING");
         payload.put("currentStageOrder", stageOrder);
         payload.put("processedSteps", processedSteps);
         payload.put("totalSteps", totalSteps);
@@ -635,6 +672,29 @@ public class TierScanEngine {
         payload.put("batchCompleted", context.getBatchCompleted());
         payload.put("batchTotal", context.getBatchTotal());
         eventPublisher.publishScanProgress(scan.getId(), payload);
+    }
+
+    private void publishAiEnrichmentProgress(Long scanId, ScanExecutionContext context, int completed, int total) {
+        Scan scan = refreshScan(scanId, null);
+        if (scan == null || isCancelled(scan)) {
+            return;
+        }
+        int safeTotal = Math.max(total, 0);
+        int safeCompleted = Math.max(0, Math.min(completed, safeTotal));
+        int progress = safeTotal == 0 ? 99 : 90 + (int) Math.round(safeCompleted * 9.0 / safeTotal);
+        scan.setProgress(progress);
+        scan.setUpdatedAt(LocalDateTime.now());
+        saveScan(scan);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", scan.getStatus());
+        payload.put("progress", progress);
+        payload.put("pipelinePhase", "AI_ENRICHMENT");
+        payload.put("aiCompleted", safeCompleted);
+        payload.put("aiTotal", safeTotal);
+        payload.put("currentStageOrder", null);
+        payload.put("stepLabel", "AI finding enrichment");
+        eventPublisher.publishScanProgress(scanId, payload);
     }
 
     private void publishScanStatus(Scan scan, ScanExecutionContext context, Integer processedSteps, Integer totalSteps, String message) {

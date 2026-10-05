@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface ScanActivityRepository extends JpaRepository<ScanActivity, Long> {
     List<ScanActivity> findByScanIdAndScanUserIdOrderByCreatedAtAsc(Long scanId, Long userId);
+    void deleteByScanId(Long scanId);
 }

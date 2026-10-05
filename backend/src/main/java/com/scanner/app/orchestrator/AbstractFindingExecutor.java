@@ -2,6 +2,7 @@ package com.scanner.app.orchestrator;
 
 import com.scanner.app.domain.Finding;
 import com.scanner.app.domain.Scan;
+import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.service.FindingService;
 import com.scanner.app.websocket.EventPublisher;
 
@@ -11,10 +12,13 @@ abstract class AbstractFindingExecutor implements ToolStepExecutor {
 
     protected final FindingService findingService;
     protected final ToolExecutionService toolExecutionService;
+    protected final FindingEnrichmentService findingEnrichmentService;
 
-    protected AbstractFindingExecutor(FindingService findingService, ToolExecutionService toolExecutionService) {
+    protected AbstractFindingExecutor(FindingService findingService, ToolExecutionService toolExecutionService,
+                                      FindingEnrichmentService findingEnrichmentService) {
         this.findingService = findingService;
         this.toolExecutionService = toolExecutionService;
+        this.findingEnrichmentService = findingEnrichmentService;
     }
 
     protected Finding saveFinding(
@@ -60,6 +64,7 @@ abstract class AbstractFindingExecutor implements ToolStepExecutor {
             context.markForwardProgress();
         }
         eventPublisher.publishScanEvent(scan.getId(), "FINDING_FOUND", finding);
+        findingEnrichmentService.enqueueFinding(finding.getId(), scan.getId());
         return finding;
     }
 }

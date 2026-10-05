@@ -2,6 +2,7 @@ package com.scanner.app.websocket;
 
 import com.scanner.app.domain.Finding;
 import com.scanner.app.service.ScanActivityService;
+import org.hibernate.LazyInitializationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -63,36 +64,69 @@ public class EventPublisher {
         if (data instanceof Finding finding) {
             Map<String, Object> findingPayload = new LinkedHashMap<>();
             findingPayload.put("id", finding.getId());
-            findingPayload.put("category", finding.getCategory());
-            findingPayload.put("title", finding.getTitle());
-            findingPayload.put("severity", finding.getSeverity());
-            findingPayload.put("status", finding.getStatus());
-            findingPayload.put("affectedUrl", finding.getAffectedUrl());
-            findingPayload.put("description", finding.getDescription());
-            findingPayload.put("aiDescription", finding.getAiDescription());
-            findingPayload.put("exploitNarrative", finding.getExploitNarrative());
-            findingPayload.put("aiEnrichmentStatus", finding.getAiEnrichmentStatus());
-            findingPayload.put("aiModel", finding.getAiModel());
-            findingPayload.put("aiEnrichedAt", finding.getAiEnrichedAt());
-            findingPayload.put("aiEnrichmentError", finding.getAiEnrichmentError());
-            findingPayload.put("createdAt", finding.getCreatedAt());
-            if (finding.getTarget() != null) {
-                Map<String, Object> targetPayload = new LinkedHashMap<>();
-                targetPayload.put("id", finding.getTarget().getId());
-                targetPayload.put("name", finding.getTarget().getName());
-                targetPayload.put("baseUrl", finding.getTarget().getBaseUrl());
-                targetPayload.put("domain", finding.getTarget().getDomain());
-                findingPayload.put("target", targetPayload);
+            findingPayload.put("category", safeRead(() -> finding.getCategory(), null));
+            findingPayload.put("title", safeRead(() -> finding.getTitle(), null));
+            findingPayload.put("severity", safeRead(() -> finding.getSeverity(), null));
+            findingPayload.put("status", safeRead(() -> finding.getStatus(), null));
+            findingPayload.put("affectedUrl", safeRead(() -> finding.getAffectedUrl(), null));
+            findingPayload.put("description", safeRead(() -> finding.getDescription(), null));
+            findingPayload.put("aiDescription", safeRead(() -> finding.getAiDescription(), null));
+            findingPayload.put("exploitNarrative", safeRead(() -> finding.getExploitNarrative(), null));
+            findingPayload.put("aiEnrichmentStatus", safeRead(() -> finding.getAiEnrichmentStatus(), null));
+            findingPayload.put("aiModel", safeRead(() -> finding.getAiModel(), null));
+            findingPayload.put("aiEnrichedAt", safeRead(() -> finding.getAiEnrichedAt(), null));
+            findingPayload.put("aiEnrichmentError", safeRead(() -> finding.getAiEnrichmentError(), null));
+            findingPayload.put("createdAt", safeRead(() -> finding.getCreatedAt(), null));
+            try {
+                if (finding.getTarget() != null) {
+                    Map<String, Object> targetPayload = new LinkedHashMap<>();
+                    targetPayload.put("id", safeRead(() -> finding.getTarget().getId(), null));
+                    targetPayload.put("name", safeRead(() -> finding.getTarget().getName(), null));
+                    targetPayload.put("baseUrl", safeRead(() -> finding.getTarget().getBaseUrl(), null));
+                    targetPayload.put("domain", safeRead(() -> finding.getTarget().getDomain(), null));
+                    findingPayload.put("target", targetPayload);
+                }
+            } catch (RuntimeException exception) {
+                if (!isLazyInitializationFailure(exception)) {
+                    throw exception;
+                }
             }
-            if (finding.getScan() != null) {
-                Map<String, Object> scanPayload = new LinkedHashMap<>();
-                scanPayload.put("id", finding.getScan().getId());
-                scanPayload.put("name", finding.getScan().getName());
-                findingPayload.put("scan", scanPayload);
+            try {
+                if (finding.getScan() != null) {
+                    Map<String, Object> scanPayload = new LinkedHashMap<>();
+                    scanPayload.put("id", safeRead(() -> finding.getScan().getId(), null));
+                    scanPayload.put("name", safeRead(() -> finding.getScan().getName(), null));
+                    findingPayload.put("scan", scanPayload);
+                }
+            } catch (RuntimeException exception) {
+                if (!isLazyInitializationFailure(exception)) {
+                    throw exception;
+                }
             }
             return findingPayload;
         }
         return data;
+    }
+
+    private boolean isLazyInitializationFailure(Throwable exception) {
+        return exception instanceof LazyInitializationException
+                || (exception.getCause() != null && isLazyInitializationFailure(exception.getCause()));
+    }
+
+    private <T> T safeRead(java.util.concurrent.Callable<T> reader, T fallback) {
+        try {
+            return reader.call();
+        } catch (RuntimeException exception) {
+            if (isLazyInitializationFailure(exception)) {
+                return fallback;
+            }
+            throw exception;
+        } catch (Exception exception) {
+            if (isLazyInitializationFailure(exception)) {
+                return fallback;
+            }
+            throw new IllegalStateException("Unable to read event payload value", exception);
+        }
     }
 
     private String buildActivityMessage(String eventType, Object data) {

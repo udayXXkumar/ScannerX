@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Search, X } from 'lucide-react'
+import { AlertTriangle, Search, X, ChevronDown, Sparkles } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { updateFinding } from '../../api/findingApi'
@@ -23,6 +23,19 @@ import { useWorkspaceTargets } from '../../hooks/useWorkspaceTargets'
 import { workspaceQueryKeys } from '../../lib/workspaceQueryKeys'
 
 const ALL_TARGETS = 'all-targets'
+const AI_DISPLAY_PREFERENCES_KEY = 'scannerx.findings.ai-display-preferences'
+
+const readAiDisplayPreferences = () => {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(AI_DISPLAY_PREFERENCES_KEY) || '{}')
+    return {
+      showAiEnhanced: saved.showAiEnhanced !== false,
+      showAiSeverityPriority: saved.showAiSeverityPriority !== false,
+    }
+  } catch {
+    return { showAiEnhanced: true, showAiSeverityPriority: true }
+  }
+}
 
 const FindingsList = () => {
   const queryClient = useQueryClient()
@@ -33,7 +46,21 @@ const FindingsList = () => {
   const [filterSeverity, setFilterSeverity] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showAiEnhanced, setShowAiEnhanced] = useState(() => readAiDisplayPreferences().showAiEnhanced)
+  const [showAiSeverityPriority, setShowAiSeverityPriority] = useState(() => readAiDisplayPreferences().showAiSeverityPriority)
+  const [showAiMenu, setShowAiMenu] = useState(false)
+  const [aiMenuPosition, setAiMenuPosition] = useState({ top: 0, left: 0 })
+  const aiMenuTriggerRef = useRef(null)
+  const aiMenuPanelRef = useRef(null)
   const selectedTargetId = searchParams.get('targetId') || ALL_TARGETS
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(AI_DISPLAY_PREFERENCES_KEY, JSON.stringify({ showAiEnhanced, showAiSeverityPriority }))
+    } catch {
+      // Keep the controls usable if browser storage is unavailable.
+    }
+  }, [showAiEnhanced, showAiSeverityPriority])
 
   const { targets } = useWorkspaceTargets()
 
@@ -50,6 +77,25 @@ const FindingsList = () => {
       refetchInterval: activeScan ? 3000 : false,
     },
   })
+
+  useEffect(() => {
+    if (!showAiMenu) return undefined
+
+    const closeOnOutsideClick = (event) => {
+      if (!aiMenuPanelRef.current?.contains(event.target) && !aiMenuTriggerRef.current?.contains(event.target)) {
+        setShowAiMenu(false)
+      }
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setShowAiMenu(false)
+    }
+    window.addEventListener('pointerdown', closeOnOutsideClick)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', closeOnOutsideClick)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [showAiMenu])
 
   const mergedFindings = useMemo(() => {
     const liveFindings = events
@@ -95,9 +141,27 @@ const FindingsList = () => {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateFinding(id, data),
-    onSuccess: () => {
+    onSuccess: (savedFinding, variables) => {
+      const updatedFinding = savedFinding && typeof savedFinding === 'object'
+        ? savedFinding
+        : { ...selectedFinding, ...variables.data }
+
+      // Patch every cached findings scope so lists and scan views reflect the save immediately.
+      queryClient.setQueriesData({ queryKey: workspaceQueryKeys.findings }, (current) => {
+        if (!Array.isArray(current)) return current
+        return current.map((finding) =>
+          String(finding?.id) === String(variables.id)
+            ? { ...finding, ...updatedFinding }
+            : finding,
+        )
+      })
       queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.findings })
       queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.dashboardSummary })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scans })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.targets })
+      queryClient.invalidateQueries({ queryKey: ['scan'] })
+      queryClient.invalidateQueries({ queryKey: ['scan-report'] })
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.reportSummary })
       setIsModalOpen(false)
       setSelectedFinding(null)
     },
@@ -119,6 +183,7 @@ const FindingsList = () => {
   }
 
   const filteredFindings = mergedFindings.filter((finding) => {
+    // UI-only filtering: backend processing and saved findings are unchanged.
     const normalizedSeverity = normalizeFindingSeverity(finding.severity)
     const normalizedStatus = normalizeFindingStatus(finding.status)
     const matchesSeverity = filterSeverity === 'All' || normalizedSeverity === filterSeverity
@@ -128,8 +193,8 @@ const FindingsList = () => {
       !query ||
       [
         finding.title,
-        getFindingDisplayDescription(finding),
-        getFindingExploitNarrative(finding),
+        showAiEnhanced ? getFindingDisplayDescription(finding) : finding.description,
+        showAiEnhanced ? getFindingExploitNarrative(finding) : '',
         finding.affectedUrl,
         finding.target?.name,
       ]
@@ -137,6 +202,18 @@ const FindingsList = () => {
 
     return matchesSeverity && matchesStatus && matchesSearch
   })
+
+  const openAiMenu = () => {
+    if (aiMenuTriggerRef.current) {
+      const rect = aiMenuTriggerRef.current.getBoundingClientRect()
+      const width = Math.min(304, window.innerWidth - 24)
+      setAiMenuPosition({
+        top: Math.max(8, Math.min(rect.bottom + 10, window.innerHeight - 360)),
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 12)),
+      })
+    }
+    setShowAiMenu((open) => !open)
+  }
 
   const severityStats = {
     CRITICAL: filteredFindings.filter((finding) => String(finding.severity || '').toUpperCase() === 'CRITICAL').length,
@@ -196,6 +273,53 @@ const FindingsList = () => {
               onChange={(event) => setSearchQuery(event.target.value)}
               className="w-full border-none bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-500"
             />
+          </div>
+
+          <div className="relative ml-2">
+            <button
+              ref={aiMenuTriggerRef}
+              type="button"
+              aria-expanded={showAiMenu}
+              aria-haspopup="dialog"
+              onClick={openAiMenu}
+              className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-black/70 px-4 text-sm font-medium text-zinc-200 shadow-inner transition-colors hover:border-white/20 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prowler-green/50"
+            >
+              <Sparkles size={15} className="text-slate-300" />
+              AI
+              <ChevronDown size={14} className={`text-slate-400 transition-transform ${showAiMenu ? 'rotate-180' : ''}`} />
+            </button>
+            {showAiMenu && createPortal(
+              <div
+                ref={aiMenuPanelRef}
+                role="dialog"
+                aria-label="AI findings display options"
+                style={{ top: `${aiMenuPosition.top}px`, left: `${aiMenuPosition.left}px` }}
+                className="fixed z-[220] w-[min(19rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/12 bg-black/80 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.65)] backdrop-blur-2xl"
+              >
+                <div className="border-b border-white/8 px-3.5 py-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <Sparkles size={15} className="text-prowler-green" />
+                    AI display options
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">Change how saved findings appear. Processing continues in the background.</p>
+                </div>
+                <div className="space-y-0.5 p-1">
+                  <AiDisplayToggle
+                    label="AI-enhanced descriptions"
+                    description="Show AI summary and defensive guidance"
+                    checked={showAiEnhanced}
+                    onChange={setShowAiEnhanced}
+                  />
+                  <AiDisplayToggle
+                    label="AI severity and priority"
+                    description="Show AI suggestions beside scanner severity"
+                    checked={showAiSeverityPriority}
+                    onChange={setShowAiSeverityPriority}
+                  />
+                </div>
+              </div>,
+              document.body,
+            )}
           </div>
 
           <DarkSelect
@@ -306,13 +430,14 @@ const FindingsList = () => {
       </div>
 
       {isModalOpen && selectedFinding ? (
-        <FindingModal
+        <FindingModal showAiEnhanced={showAiEnhanced} showAiSeverityPriority={showAiSeverityPriority}
           finding={selectedFinding}
           updateForm={updateForm}
           setUpdateForm={setUpdateForm}
           onSubmit={handleUpdateSubmit}
           onClose={() => setIsModalOpen(false)}
           isLoading={updateMutation.isPending}
+          saveError={updateMutation.error ? getFindingsErrorMessage(updateMutation.error, 'Unable to save finding changes.') : ''}
         />
       ) : null}
     </div>
@@ -337,7 +462,7 @@ const StatCard = ({ label, value, color }) => {
   )
 }
 
-const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, isLoading }) => {
+const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, isLoading, saveError, showAiEnhanced, showAiSeverityPriority }) => {
   const hasAiContent = hasFindingAiContent(finding)
   const enrichmentStatus = getFindingEnrichmentStatus(finding)
 
@@ -349,6 +474,9 @@ const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, i
             <div className="min-w-0">
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <SeverityBadge severity={finding.severity} />
+                {showAiSeverityPriority && finding.aiSeverity ? <span className="rounded-md border border-prowler-green/20 bg-prowler-green/[0.08] px-2 py-1 text-xs text-prowler-green" title={finding.aiSeverityReason || 'AI severity suggestion'}>AI {normalizeFindingSeverity(finding.aiSeverity)}</span> : null}
+                {showAiSeverityPriority && finding.aiPriorityScore != null ? <span className="rounded-md border border-indigo-400/20 bg-indigo-400/[0.08] px-2 py-1 text-xs font-mono text-indigo-200" title={finding.aiPriorityReason || 'AI impact priority'}>Priority {finding.aiPriorityScore}/10</span> : null}
+                {finding.aiDuplicateOfId ? <span className="rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 text-xs text-slate-300" title={`Linked to finding #${finding.aiDuplicateOfId}`}>Duplicate of #{finding.aiDuplicateOfId}</span> : null}
                 <span className="font-mono text-sm text-slate-500">#{finding.id}</span>
               </div>
               <h2 className="break-words text-2xl font-bold text-white">{sanitizeFindingTitle(finding.title)}</h2>
@@ -364,7 +492,7 @@ const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, i
               <div>
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">Description</h3>
                 <div className="surface-card-inner whitespace-pre-wrap break-words p-4 text-sm leading-6 text-slate-300">
-                  {getFindingDisplayDescription(finding) || 'No description available.'}
+                  {showAiEnhanced && getFindingDisplayDescription(finding) ? getFindingDisplayDescription(finding) : finding.description || 'No description available.'}
                 </div>
                 {!hasAiContent && (enrichmentStatus === 'PENDING' || enrichmentStatus === 'PROCESSING') ? (
                   <p className="mt-3 text-xs text-cyan-200/80">
@@ -372,13 +500,18 @@ const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, i
                   </p>
                 ) : null}
                 {!hasAiContent && enrichmentStatus === 'FAILED' ? (
-                  <p className="mt-3 text-xs text-amber-200/80">
-                    AI enrichment was unavailable for this finding, so ScannerX is showing the raw scanner description instead.
-                  </p>
+                  <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/[0.05] px-3 py-2.5">
+                    <p className="text-xs text-amber-200/90">
+                      AI enrichment failed for this finding, so ScannerX is showing the raw scanner description instead.
+                    </p>
+                    {finding.aiEnrichmentError ? (
+                      <p className="mt-1.5 break-words text-xs text-slate-400">Reason: {finding.aiEnrichmentError}</p>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
 
-              {getFindingExploitNarrative(finding) ? (
+              {showAiEnhanced && getFindingExploitNarrative(finding) ? (
                 <div>
                   <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-300">
                     Attacker Perspective And Defensive Guidance
@@ -426,8 +559,8 @@ const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, i
                   />
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-xs font-medium text-slate-400">Comments</label>
+              <div>
+                <label className="mb-2 block text-xs font-medium text-slate-400">Comments</label>
                   <textarea
                     value={updateForm.comments}
                     onChange={(event) => setUpdateForm({ ...updateForm, comments: event.target.value })}
@@ -436,6 +569,12 @@ const FindingModal = ({ finding, updateForm, setUpdateForm, onSubmit, onClose, i
                     placeholder="Add your notes..."
                   />
                 </div>
+
+                {saveError ? (
+                  <p role="alert" className="rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2 text-xs text-rose-200">
+                    {saveError}
+                  </p>
+                ) : null}
 
                 <button
                   type="submit"
@@ -478,4 +617,24 @@ export default FindingsList
 
 function getFindingsErrorMessage(error, fallbackMessage) {
   return error?.response?.data?.message || error?.message || fallbackMessage
+}
+
+function AiDisplayToggle({ label, description, checked, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center justify-between gap-4 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-prowler-green/40"
+    >
+      <span className="min-w-0">
+        <span className="block text-[13px] font-medium text-slate-200">{label}</span>
+        <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">{description}</span>
+      </span>
+      <span className={`relative h-[21px] w-[38px] shrink-0 rounded-full border transition-colors ${checked ? 'border-prowler-green/50 bg-prowler-green/30' : 'border-white/15 bg-white/[0.06]'}`}>
+        <span className={`absolute top-[3px] h-[13px] w-[13px] rounded-full shadow-sm transition-all ${checked ? 'left-[20px] bg-prowler-green' : 'left-[3px] bg-slate-400'}`} />
+      </span>
+    </button>
+  )
 }

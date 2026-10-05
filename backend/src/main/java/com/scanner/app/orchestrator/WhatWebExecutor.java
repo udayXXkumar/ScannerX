@@ -3,6 +3,7 @@ package com.scanner.app.orchestrator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scanner.app.domain.Scan;
+import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.service.FindingService;
 import com.scanner.app.websocket.EventPublisher;
 import org.springframework.stereotype.Component;
@@ -18,8 +19,8 @@ public class WhatWebExecutor extends AbstractFindingExecutor {
 
     private final ObjectMapper objectMapper;
 
-    public WhatWebExecutor(FindingService findingService, ToolExecutionService toolExecutionService, ObjectMapper objectMapper) {
-        super(findingService, toolExecutionService);
+    public WhatWebExecutor(FindingService findingService, ToolExecutionService toolExecutionService, ObjectMapper objectMapper, FindingEnrichmentService findingEnrichmentService) {
+        super(findingService, toolExecutionService, findingEnrichmentService);
         this.objectMapper = objectMapper;
     }
 

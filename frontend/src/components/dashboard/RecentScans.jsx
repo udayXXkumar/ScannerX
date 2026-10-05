@@ -59,7 +59,7 @@ export default function RecentScans({ scans = [] }) {
 
               <div className="flex shrink-0 flex-col items-end gap-2">
                 <StatusBadge status={scan.status} />
-                <span className="text-xs text-zinc-500">{scan.progress ?? 0}%</span>
+                <span className="text-xs text-zinc-500">{Math.round(scan.progress ?? 0)}%</span>
               </div>
             </button>
           ))}

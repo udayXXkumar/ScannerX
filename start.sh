@@ -129,6 +129,7 @@ start_frontend() {
   exit 1
 }
 
+load_local_env_file "$BACKEND_DIR/.env.phone"
 load_local_env_file "$ROOT_DIR/.env.local"
 load_local_env_file "$BACKEND_DIR/.env.local"
 

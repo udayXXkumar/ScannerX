@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class NucleiExecutorTest {
 
-    private final NucleiExecutor executor = new NucleiExecutor(null, null, new ObjectMapper());
+    private final NucleiExecutor executor = new NucleiExecutor(null, null, new ObjectMapper(), null);
 
     @Test
     void resolveBatchTimeoutReturnsNullWhenStepHasNoOverallDeadline() {

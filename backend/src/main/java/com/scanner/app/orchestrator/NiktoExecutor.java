@@ -1,6 +1,7 @@
 package com.scanner.app.orchestrator;
 
 import com.scanner.app.domain.Scan;
+import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.service.FindingService;
 import com.scanner.app.websocket.EventPublisher;
 import org.springframework.stereotype.Component;
@@ -10,8 +11,8 @@ import java.util.List;
 @Component
 public class NiktoExecutor extends AbstractFindingExecutor {
 
-    public NiktoExecutor(FindingService findingService, ToolExecutionService toolExecutionService) {
-        super(findingService, toolExecutionService);
+    public NiktoExecutor(FindingService findingService, ToolExecutionService toolExecutionService, FindingEnrichmentService findingEnrichmentService) {
+        super(findingService, toolExecutionService, findingEnrichmentService);
     }
 
     @Override

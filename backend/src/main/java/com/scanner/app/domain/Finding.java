@@ -67,6 +67,26 @@ public class Finding {
     @Column(name = "ai_enrichment_error", columnDefinition = "TEXT")
     private String aiEnrichmentError;
 
+    @Column(name = "ai_severity")
+    private String aiSeverity;
+
+    @Column(name = "ai_severity_reason", columnDefinition = "TEXT")
+    private String aiSeverityReason;
+
+    @Column(name = "ai_priority_score")
+    private Integer aiPriorityScore;
+
+    @Column(name = "ai_priority_reason", columnDefinition = "TEXT")
+    private String aiPriorityReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ai_duplicate_of_id")
+    @JsonIgnore
+    private Finding aiDuplicateOf;
+
+    @Column(name = "ai_duplicate_of_id", insertable = false, updatable = false)
+    private Long aiDuplicateOfId;
+
     private String assignedUser;
     private String cweId;
     private String owaspCategory;

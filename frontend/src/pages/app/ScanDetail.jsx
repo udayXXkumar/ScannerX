@@ -217,11 +217,20 @@ const ScanDetail = () => {
   const displayProgress = useMemo(() => {
     const progressPayload = latestProgressEvent?.data
     const fallbackProgress = Number(latestStatusEvent?.data?.progress ?? scan?.progress ?? 0)
+    if (normalizeScanStatus(displayStatus) === 'COMPLETED') return 100
     if (!progressPayload) {
-      return Math.min(fallbackProgress, 100)
+      return Math.round(Math.min(fallbackProgress, 100))
     }
 
     const baseProgress = Number(progressPayload.progress ?? fallbackProgress)
+    if (progressPayload.pipelinePhase === 'AI_ENRICHMENT') {
+      const aiTotal = Number(progressPayload.aiTotal)
+      const aiCompleted = Number(progressPayload.aiCompleted)
+      if (Number.isFinite(aiTotal) && aiTotal > 0 && Number.isFinite(aiCompleted)) {
+        return Math.round(Math.min(99, 90 + (Math.max(0, Math.min(aiCompleted, aiTotal)) * 9) / aiTotal))
+      }
+      return Math.round(Math.min(baseProgress, 100))
+    }
     const processedSteps = Number(progressPayload.processedSteps)
     const totalSteps = Number(progressPayload.totalSteps)
     const stageProgressPercent = Number(progressPayload.stageProgressPercent)
@@ -232,17 +241,19 @@ const ScanDetail = () => {
       totalSteps > 0 &&
       Number.isFinite(stageProgressPercent)
     ) {
-      const interpolatedProgress = ((processedSteps + Math.max(0, Math.min(stageProgressPercent, 100)) / 100) * 100) / totalSteps
-      return Math.min(100, Math.max(baseProgress, interpolatedProgress))
+      const scannerProgress = ((processedSteps + Math.max(0, Math.min(stageProgressPercent, 100)) / 100) * 90) / totalSteps
+      return Math.round(Math.min(90, Math.max(baseProgress, scannerProgress)))
     }
 
-    return Math.min(baseProgress, 100)
-  }, [latestProgressEvent, latestStatusEvent, scan?.progress])
+    return Math.round(Math.min(baseProgress, 100))
+  }, [displayStatus, latestProgressEvent, latestStatusEvent, scan?.progress])
 
   const adaptiveBudgetActive = Boolean(latestProgressEvent?.data?.adaptiveBudgetActive)
   const batchCompleted = Number(latestProgressEvent?.data?.batchCompleted)
   const batchTotal = Number(latestProgressEvent?.data?.batchTotal)
-  const progressHelper = adaptiveBudgetActive
+  const progressHelper = latestProgressEvent?.data?.pipelinePhase === 'AI_ENRICHMENT'
+    ? `AI enrichment ${Number(latestProgressEvent.data.aiCompleted || 0)} of ${Number(latestProgressEvent.data.aiTotal || 0)} findings`
+    : adaptiveBudgetActive
     ? 'Extending scan window to finish current stage'
     : scan?.target?.name || 'Current target'
   const progressDetail =

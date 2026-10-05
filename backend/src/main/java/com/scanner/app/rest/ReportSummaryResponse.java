@@ -13,6 +13,12 @@ public class ReportSummaryResponse {
     private String targetName;
     private Long scanId;
     private String scanName;
+    private String scanTier;
+    private String scanStatus;
+    private String targetUrl;
+    private LocalDateTime scanStartedAt;
+    private LocalDateTime scanCompletedAt;
+    private Long scanDurationSeconds;
     private long totalTargets;
     private long totalScans;
     private long totalFindings;

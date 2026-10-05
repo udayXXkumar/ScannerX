@@ -53,7 +53,7 @@ public class FindingController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Finding> updateFinding(@PathVariable Long id, @RequestBody Finding findingDetails, Authentication authentication) {
+    public ResponseEntity<FindingWorkflowResponse> updateFinding(@PathVariable Long id, @RequestBody Finding findingDetails, Authentication authentication) {
         Optional<User> currentUser = resolveCurrentUser(authentication);
         if (currentUser.isEmpty()) {
             return ResponseEntity.status(401).build();
@@ -69,9 +69,17 @@ public class FindingController {
             if (findingDetails.getComments() != null) {
                 finding.setComments(findingDetails.getComments());
             }
-            return ResponseEntity.ok(findingRepository.save(finding));
+            Finding savedFinding = findingRepository.save(finding);
+            return ResponseEntity.ok(new FindingWorkflowResponse(
+                    savedFinding.getId(),
+                    savedFinding.getStatus(),
+                    savedFinding.getAssignedUser(),
+                    savedFinding.getComments()
+            ));
         }).orElse(ResponseEntity.notFound().build());
     }
+
+    public record FindingWorkflowResponse(Long id, String status, String assignedUser, String comments) {}
 
     private Optional<User> resolveCurrentUser(Authentication authentication) {
         if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {

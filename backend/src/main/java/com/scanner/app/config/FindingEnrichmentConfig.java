@@ -19,7 +19,7 @@ public class FindingEnrichmentConfig {
         executor.setThreadNamePrefix("finding-ai-");
         executor.setCorePoolSize(normalizedConcurrency);
         executor.setMaxPoolSize(normalizedConcurrency);
-        executor.setQueueCapacity(Math.max(8, normalizedConcurrency * 8));
+        executor.setQueueCapacity(Math.max(1024, normalizedConcurrency * 64));
         executor.setWaitForTasksToCompleteOnShutdown(false);
         executor.initialize();
         return executor;

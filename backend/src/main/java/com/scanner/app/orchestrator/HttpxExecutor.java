@@ -1,6 +1,7 @@
 package com.scanner.app.orchestrator;
 
 import com.scanner.app.domain.Scan;
+import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.service.FindingService;
 import com.scanner.app.websocket.EventPublisher;
 import org.springframework.stereotype.Component;
@@ -24,8 +25,8 @@ public class HttpxExecutor extends AbstractFindingExecutor {
 
     private static final Pattern TITLE_PATTERN = Pattern.compile("(?is)<title[^>]*>(.*?)</title>");
 
-    public HttpxExecutor(FindingService findingService, ToolExecutionService toolExecutionService) {
-        super(findingService, toolExecutionService);
+    public HttpxExecutor(FindingService findingService, ToolExecutionService toolExecutionService, FindingEnrichmentService findingEnrichmentService) {
+        super(findingService, toolExecutionService, findingEnrichmentService);
     }
 
     @Override

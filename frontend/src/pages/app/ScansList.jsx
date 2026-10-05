@@ -37,6 +37,7 @@ const ScansList = () => {
         includeFindings: true,
         includeReports: true,
         includeNotifications: true,
+        scanId,
       })
     },
     onError: (error) => {
@@ -185,7 +186,7 @@ const ScansList = () => {
               <tbody className="divide-y divide-white/8">
                 {filteredScans.map((scan) => {
                   const status = normalizeScanStatus(scan.status)
-                  const progress = Math.min(scan.progress || 0, 100)
+                  const progress = Math.round(Math.min(scan.progress || 0, 100))
                   const isFailed = status === 'FAILED' || status === 'CANCELLED'
                   const isDeleting = deleteMutation.isPending && deleteMutation.variables === scan.id
                   const isPaused = status === 'PAUSED'

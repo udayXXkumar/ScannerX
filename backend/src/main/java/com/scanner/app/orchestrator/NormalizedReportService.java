@@ -38,6 +38,10 @@ public class NormalizedReportService {
             NormalizedScanReport.FindingEntry entry = new NormalizedScanReport.FindingEntry();
             entry.setType(valueOrFallback(finding.getTitle(), "Security Result"));
             entry.setSeverity(normalizeSeverity(finding.getSeverity()));
+            entry.setAiSeverity(finding.getAiSeverity());
+            entry.setAiPriorityScore(finding.getAiPriorityScore());
+            entry.setAiPriorityReason(finding.getAiPriorityReason());
+            entry.setDuplicate(finding.getAiDuplicateOfId() != null);
             entry.setEndpoint(valueOrFallback(finding.getAffectedUrl(), scan.getTarget() != null ? scan.getTarget().getBaseUrl() : ""));
             entry.setDescription(valueOrFallback(resolveFindingDescription(finding), "No description available."));
             entry.setExploitNarrative(valueOrFallback(finding.getExploitNarrative(), ""));

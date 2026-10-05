@@ -3,6 +3,7 @@ package com.scanner.app.repository;
 import com.scanner.app.domain.Finding;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -30,6 +31,9 @@ public interface FindingRepository extends JpaRepository<Finding, Long> {
     List<Finding> findExistingFindings(@Param("targetId") Long targetId,
                                      @Param("title") String title,
                                      @Param("affectedUrl") String affectedUrl);
+
+    @Query("SELECT f FROM Finding f WHERE f.target.id = :targetId AND f.id != :findingId AND LOWER(COALESCE(f.toolName, '')) <> 'engine' AND LOWER(COALESCE(f.category, '')) <> 'execution' ORDER BY f.id DESC")
+    List<Finding> findDuplicateCandidates(@Param("targetId") Long targetId, @Param("findingId") Long findingId, org.springframework.data.domain.Pageable pageable);
 
     @Query("""
         SELECT f
@@ -85,6 +89,10 @@ public interface FindingRepository extends JpaRepository<Finding, Long> {
     Optional<Finding> findByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
     long countByScanId(Long scanId);
+
+    @Modifying
+    @Query("UPDATE Finding f SET f.aiDuplicateOf = NULL WHERE f.aiDuplicateOf.id IN (SELECT duplicate.id FROM Finding duplicate WHERE duplicate.scan.id = :scanId)")
+    int clearDuplicateReferencesToScan(@Param("scanId") Long scanId);
 
     void deleteByScanId(Long scanId);
 }

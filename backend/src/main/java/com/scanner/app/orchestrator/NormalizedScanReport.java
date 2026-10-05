@@ -26,6 +26,10 @@ public class NormalizedScanReport {
     public static class FindingEntry {
         private String type;
         private String severity;
+        private String aiSeverity;
+        private Integer aiPriorityScore;
+        private String aiPriorityReason;
+        private boolean duplicate;
         private String endpoint;
         private String description;
         private String exploitNarrative;
