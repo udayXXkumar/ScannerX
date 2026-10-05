@@ -32,3 +32,4 @@ frontend/.vercel/
 !.env.example
 !frontend/.env.example
 !backend/.env.phone.example
+.env*
