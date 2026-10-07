@@ -3,6 +3,7 @@ package com.scanner.app.service;
 import com.scanner.app.domain.Finding;
 import com.scanner.app.orchestrator.ScanTier;
 import com.scanner.app.repository.FindingRepository;
+import com.scanner.app.repository.ScanRepository;
 import com.scanner.app.websocket.EventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +33,7 @@ public class FindingEnrichmentService {
     private static final Logger logger = LoggerFactory.getLogger(FindingEnrichmentService.class);
 
     private final FindingRepository findingRepository;
+    private final ScanRepository scanRepository;
     private final AiInferenceClient huggingFaceInferenceClient;
     private final EventPublisher eventPublisher;
     private final Executor findingEnrichmentExecutor;
@@ -44,9 +47,13 @@ public class FindingEnrichmentService {
     private final ConcurrentMap<Long, AtomicInteger> activeJobsByScan = new ConcurrentHashMap<>();
     private final Object activeJobsMonitor = new Object();
     private final ConcurrentMap<Long, ScanEnrichmentProgress> scanProgress = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, Boolean> scanCancellationCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, Object> scanCancellationLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, java.util.Set<Thread>> activeWorkersByScan = new ConcurrentHashMap<>();
 
     public FindingEnrichmentService(
             FindingRepository findingRepository,
+            ScanRepository scanRepository,
             AiInferenceClient huggingFaceInferenceClient,
             EventPublisher eventPublisher,
             @Qualifier("findingEnrichmentExecutor") Executor findingEnrichmentExecutor,
@@ -58,6 +65,7 @@ public class FindingEnrichmentService {
             @Value("${app.ai.finding-enrichment.deep-timeout-ms:900000}") long deepScanWaitTimeoutMs
     ) {
         this.findingRepository = findingRepository;
+        this.scanRepository = scanRepository;
         this.huggingFaceInferenceClient = huggingFaceInferenceClient;
         this.eventPublisher = eventPublisher;
         this.findingEnrichmentExecutor = findingEnrichmentExecutor;
@@ -69,20 +77,53 @@ public class FindingEnrichmentService {
         this.deepScanWaitTimeoutMs = Math.max(1000, deepScanWaitTimeoutMs);
     }
 
+    public FindingEnrichmentService(
+            FindingRepository findingRepository,
+            AiInferenceClient huggingFaceInferenceClient,
+            EventPublisher eventPublisher,
+            Executor findingEnrichmentExecutor,
+            boolean enrichmentEnabled,
+            int maxInputChars,
+            int maxRetries,
+            long fastScanWaitTimeoutMs,
+            long mediumScanWaitTimeoutMs,
+            long deepScanWaitTimeoutMs
+    ) {
+        this(findingRepository, null, huggingFaceInferenceClient, eventPublisher, findingEnrichmentExecutor,
+                enrichmentEnabled, maxInputChars, maxRetries, fastScanWaitTimeoutMs,
+                mediumScanWaitTimeoutMs, deepScanWaitTimeoutMs);
+    }
+
     /** Queue AI work as scanners persist results; API latency overlaps scanner execution. */
     public void enqueueFinding(Long findingId, Long scanId) {
-        if (findingId == null || scanId == null || !isReadyToRun() || !queuedFindingIds.add(findingId)) {
+        if (findingId == null || scanId == null || !isReadyToRun()) {
             return;
         }
+        if (isScanEnrichmentCancelled(scanId)) {
+            findingRepository.findById(findingId).ifPresent(this::markSkipped);
+            return;
+        }
+        if (!queuedFindingIds.add(findingId)) return;
 
         incrementActiveJobs(scanId);
         try {
             CompletableFuture.runAsync(() -> {
+                Thread worker = Thread.currentThread();
+                java.util.Set<Thread> scanWorkers = activeWorkersByScan.compute(scanId, (ignored, existing) -> {
+                    java.util.Set<Thread> workers = existing == null ? ConcurrentHashMap.newKeySet() : existing;
+                    workers.add(worker);
+                    return workers;
+                });
                 try {
                     enrichFindingNow(findingId);
                 } catch (Exception exception) {
                     logger.error("Unexpected AI enrichment error for finding {}", findingId, exception);
                 } finally {
+                    activeWorkersByScan.computeIfPresent(scanId, (ignored, workers) -> {
+                        workers.remove(worker);
+                        return workers.isEmpty() ? null : workers;
+                    });
+                    Thread.interrupted();
                     queuedFindingIds.remove(findingId);
                     markScanProgressDone(scanId, findingId);
                     decrementActiveJobs(scanId);
@@ -130,7 +171,11 @@ public class FindingEnrichmentService {
     }
 
     public void enrichScanFindings(Long scanId, ScanTier tier, BiConsumer<Integer, Integer> progressListener) {
-        if (scanId == null) {
+        enrichScanFindings(scanId, tier, progressListener, () -> false);
+    }
+
+    public void enrichScanFindings(Long scanId, ScanTier tier, BiConsumer<Integer, Integer> progressListener, BooleanSupplier stopWaiting) {
+        if (scanId == null || isScanEnrichmentCancelled(scanId)) {
             return;
         }
         if (!isReadyToRun()) {
@@ -158,7 +203,9 @@ public class FindingEnrichmentService {
         long deadlineNanos = System.nanoTime() + scanWaitTimeoutMs(tier) * 1_000_000L;
         try {
             synchronized (activeJobsMonitor) {
-                while (activeJobsByScan.containsKey(scanId)) {
+                while (activeJobsByScan.containsKey(scanId)
+                        && !isScanEnrichmentCancelled(scanId)
+                        && !stopWaiting.getAsBoolean()) {
                     try {
                         long remainingNanos = deadlineNanos - System.nanoTime();
                         if (remainingNanos <= 0) {
@@ -168,6 +215,10 @@ public class FindingEnrichmentService {
                         }
                         long millis = remainingNanos / 1_000_000L;
                         int nanos = (int) (remainingNanos % 1_000_000L);
+                        if (remainingNanos > 500_000_000L) {
+                            millis = 500;
+                            nanos = 0;
+                        }
                         activeJobsMonitor.wait(millis, nanos);
                     } catch (InterruptedException exception) {
                         Thread.currentThread().interrupt();
@@ -196,7 +247,7 @@ public class FindingEnrichmentService {
         }
 
         Finding finding = findingRepository.findWithContextById(findingId).orElse(null);
-        if (finding == null || !isEligible(finding)) {
+        if (finding == null || !isEligible(finding) || isScanEnrichmentCancelled(finding.getScan().getId())) {
             return;
         }
 
@@ -205,11 +256,17 @@ public class FindingEnrichmentService {
             return;
         }
 
-        finding.setAiEnrichmentStatus("PROCESSING");
-        finding.setAiPromptFingerprint(fingerprint);
-        finding.setAiModel(huggingFaceInferenceClient.getResolvedModelId());
-        finding.setAiEnrichmentError(null);
-        findingRepository.save(finding);
+        synchronized (scanCancellationLocks.computeIfAbsent(finding.getScan().getId(), ignored -> new Object())) {
+            if (isScanEnrichmentCancelled(finding.getScan().getId())) {
+                markSkipped(finding);
+                return;
+            }
+            finding.setAiEnrichmentStatus("PROCESSING");
+            finding.setAiPromptFingerprint(fingerprint);
+            finding.setAiModel(huggingFaceInferenceClient.getResolvedModelId());
+            finding.setAiEnrichmentError(null);
+            findingRepository.save(finding);
+        }
 
         List<Finding> duplicateCandidates = findingRepository.findDuplicateCandidates(finding.getTarget().getId(), finding.getId(), PageRequest.of(0, 10));
         String candidatesString = duplicateCandidates.isEmpty() ? "None" : duplicateCandidates.stream()
@@ -223,10 +280,16 @@ public class FindingEnrichmentService {
                         huggingFaceInferenceClient.enrichFinding(buildPrompt(finding, candidatesString));
 
                 Finding persistedFinding = findingRepository.findWithContextById(findingId).orElse(finding);
-                if (!fingerprint.equals(persistedFinding.getAiPromptFingerprint())) {
-                    logger.debug("Skipping stale AI enrichment result for finding {}", findingId);
-                    return;
-                }
+                Finding enrichedFinding;
+                synchronized (scanCancellationLocks.computeIfAbsent(persistedFinding.getScan().getId(), ignored -> new Object())) {
+                    if (isScanEnrichmentCancelled(persistedFinding.getScan().getId())) {
+                        markSkipped(persistedFinding);
+                        return;
+                    }
+                    if (!fingerprint.equals(persistedFinding.getAiPromptFingerprint())) {
+                        logger.debug("Skipping stale AI enrichment result for finding {}", findingId);
+                        return;
+                    }
                 persistedFinding.setAiDescription(sanitizeOutput(enrichmentResult.description(), 2500));
                 persistedFinding.setExploitNarrative(sanitizeOutput(enrichmentResult.exploitNarrative(), 2500));
                 persistedFinding.setAiSeverity(sanitizeOutput(enrichmentResult.aiSeverity(), 32));
@@ -250,7 +313,8 @@ public class FindingEnrichmentService {
                 persistedFinding.setAiPromptFingerprint(fingerprint);
                 persistedFinding.setAiEnrichedAt(LocalDateTime.now());
                 persistedFinding.setAiEnrichmentError(null);
-                Finding enrichedFinding = findingRepository.save(persistedFinding);
+                    enrichedFinding = findingRepository.save(persistedFinding);
+                }
 
                 if (enrichedFinding.getScan() != null) {
                     eventPublisher.publishScanEvent(enrichedFinding.getScan().getId(), "FINDING_ENRICHED", enrichedFinding);
@@ -292,16 +356,61 @@ public class FindingEnrichmentService {
         }
 
         Finding failedFinding = findingRepository.findWithContextById(findingId).orElse(finding);
-        if (!fingerprint.equals(failedFinding.getAiPromptFingerprint())) {
-            logger.debug("Skipping stale AI enrichment failure for finding {}", findingId);
-            return;
+        synchronized (scanCancellationLocks.computeIfAbsent(failedFinding.getScan().getId(), ignored -> new Object())) {
+            if (isScanEnrichmentCancelled(failedFinding.getScan().getId())) {
+                markSkipped(failedFinding);
+                return;
+            }
+            if (!fingerprint.equals(failedFinding.getAiPromptFingerprint())) {
+                logger.debug("Skipping stale AI enrichment failure for finding {}", findingId);
+                return;
+            }
+            failedFinding.setAiEnrichmentStatus("FAILED");
+            failedFinding.setAiModel(huggingFaceInferenceClient.getResolvedModelId());
+            failedFinding.setAiPromptFingerprint(fingerprint);
+            failedFinding.setAiEnrichedAt(null);
+            failedFinding.setAiEnrichmentError(sanitizeOutput(lastFailure == null ? "Unknown enrichment error." : lastFailure.getMessage(), 1000));
+            findingRepository.save(failedFinding);
         }
-        failedFinding.setAiEnrichmentStatus("FAILED");
-        failedFinding.setAiModel(huggingFaceInferenceClient.getResolvedModelId());
-        failedFinding.setAiPromptFingerprint(fingerprint);
-        failedFinding.setAiEnrichedAt(null);
-        failedFinding.setAiEnrichmentError(sanitizeOutput(lastFailure == null ? "Unknown enrichment error." : lastFailure.getMessage(), 1000));
-        findingRepository.save(failedFinding);
+    }
+
+    public void cancelScanEnrichment(Long scanId) {
+        if (scanId == null) return;
+        scanCancellationCache.put(scanId, Boolean.TRUE);
+        java.util.Set<Thread> workers = activeWorkersByScan.get(scanId);
+        if (workers != null) workers.forEach(Thread::interrupt);
+        Object lock = scanCancellationLocks.computeIfAbsent(scanId, ignored -> new Object());
+        synchronized (lock) {
+            findingRepository.findByScanIdOrderByCreatedAtDesc(scanId).stream()
+                    .filter(this::isEligible)
+                    .filter(finding -> !"COMPLETED".equalsIgnoreCase(finding.getAiEnrichmentStatus()))
+                    .forEach(this::markSkipped);
+        }
+        synchronized (activeJobsMonitor) {
+            activeJobsMonitor.notifyAll();
+        }
+    }
+
+    public void wakeScanWaiters() {
+        synchronized (activeJobsMonitor) {
+            activeJobsMonitor.notifyAll();
+        }
+    }
+
+    private void markSkipped(Finding finding) {
+        if (finding == null) return;
+        finding.setAiEnrichmentStatus("SKIPPED");
+        finding.setAiEnrichmentError(null);
+        finding.setAiEnrichedAt(null);
+        findingRepository.save(finding);
+    }
+
+    private boolean isScanEnrichmentCancelled(Long scanId) {
+        if (scanId == null) return false;
+        if (scanRepository == null) return Boolean.TRUE.equals(scanCancellationCache.get(scanId));
+        return scanCancellationCache.computeIfAbsent(scanId, id -> scanRepository.findById(id)
+                .map(scan -> Boolean.TRUE.equals(scan.getAiEnrichmentCancelled()))
+                .orElse(false));
     }
 
     private void markScanProgressDone(Long scanId, Long findingId) {

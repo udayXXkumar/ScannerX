@@ -15,6 +15,7 @@ public class ReportSummaryResponse {
     private String scanName;
     private String scanTier;
     private String scanStatus;
+    private boolean aiEnrichmentCancelled;
     private String targetUrl;
     private LocalDateTime scanStartedAt;
     private LocalDateTime scanCompletedAt;

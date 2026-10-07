@@ -44,6 +44,11 @@ export const resumeScan = async (id) => {
   return data;
 };
 
+export const cancelScanAiEnrichment = async (id) => {
+  const { data } = await api.post(`/scans/${id}/ai-enrichment/cancel`);
+  return data;
+};
+
 export const getScanActivity = async (id) => {
   const { data } = await api.get(`/scans/${id}/activity`);
   return data;

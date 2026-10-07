@@ -51,17 +51,19 @@ public class ReportService {
         sb.append("Target,").append(escapeCsv(report.getTarget())).append("\n");
         sb.append("Tier,").append(escapeCsv(report.getTier())).append("\n");
         sb.append("Status,").append(escapeCsv(report.getStatus())).append("\n");
+        sb.append("AI Enrichment,").append(report.isAiEnrichmentCancelled() ? "Skipped by user" : "Not cancelled").append("\n");
         sb.append("Critical,").append(report.getSummary().getCritical()).append("\n");
         sb.append("High,").append(report.getSummary().getHigh()).append("\n");
         sb.append("Medium,").append(report.getSummary().getMedium()).append("\n");
         sb.append("Low,").append(report.getSummary().getLow()).append("\n");
         sb.append("Info,").append(report.getSummary().getInfo()).append("\n\n");
-        sb.append("Type,Severity,AI Severity,Priority Score,Is Duplicate,Endpoint,Description,Exploit Narrative,Evidence,Source\n");
+        sb.append("Type,Severity,AI Severity,AI Enrichment Status,Priority Score,Is Duplicate,Endpoint,Description,Exploit Narrative,Evidence,Source\n");
 
         for (NormalizedScanReport.FindingEntry finding : report.getFindings()) {
             sb.append(escapeCsv(finding.getType())).append(",");
             sb.append(escapeCsv(finding.getSeverity())).append(",");
             sb.append(escapeCsv(finding.getAiSeverity())).append(",");
+            sb.append(escapeCsv(finding.getAiEnrichmentStatus())).append(",");
             sb.append(finding.getAiPriorityScore() != null ? finding.getAiPriorityScore() : "").append(",");
             sb.append(finding.isDuplicate() ? "Yes" : "No").append(",");
             sb.append(escapeCsv(finding.getEndpoint())).append(",");
@@ -154,6 +156,7 @@ public class ReportService {
         if (selectedScan != null) {
             response.setScanTier(selectedScan.getTier() == null ? selectedScan.getProfileType() : selectedScan.getTier());
             response.setScanStatus(selectedScan.getStatus());
+            response.setAiEnrichmentCancelled(Boolean.TRUE.equals(selectedScan.getAiEnrichmentCancelled()));
             response.setTargetUrl(selectedScan.getTarget() == null ? null : selectedScan.getTarget().getBaseUrl());
             response.setScanStartedAt(selectedScan.getStartedAt());
             response.setScanCompletedAt(selectedScan.getCompletedAt());
@@ -172,6 +175,7 @@ public class ReportService {
         sb.append("Generated At,").append(summary.getGeneratedAt()).append("\n");
         sb.append("Total Targets,").append(summary.getTotalTargets()).append("\n");
         sb.append("Total Scans,").append(summary.getTotalScans()).append("\n");
+        sb.append("AI Enrichment,").append(summary.isAiEnrichmentCancelled() ? "Skipped by user" : "Not cancelled").append("\n");
         sb.append("Total Findings,").append(summary.getTotalFindings()).append("\n");
         sb.append("Open Findings,").append(summary.getOpenFindings()).append("\n");
         sb.append("Resolved Findings,").append(summary.getResolvedFindings()).append("\n");
@@ -180,7 +184,7 @@ public class ReportService {
         sb.append("Medium,").append(summary.getMediumFindings()).append("\n");
         sb.append("Low,").append(summary.getLowFindings()).append("\n");
         sb.append("Informational,").append(summary.getInformationalFindings()).append("\n\n");
-        sb.append("ID,Target Name,Category,Title,Severity,AI Severity,Priority Score,Status,Affected URL,Is Duplicate,CWE,OWASP,Created At,Description,Exploit Narrative\n");
+        sb.append("ID,Target Name,Category,Title,Severity,AI Severity,AI Enrichment Status,Priority Score,Status,Affected URL,Is Duplicate,CWE,OWASP,Created At,Description,Exploit Narrative\n");
 
         for (Finding finding : summary.getFindings()) {
             String targetName = finding.getTarget() != null ? finding.getTarget().getName() : summary.getTargetName();
@@ -190,6 +194,7 @@ public class ReportService {
             sb.append(escapeCsv(finding.getTitle())).append(",");
             sb.append(escapeCsv(finding.getSeverity())).append(",");
             sb.append(escapeCsv(finding.getAiSeverity())).append(",");
+            sb.append(escapeCsv(finding.getAiEnrichmentStatus())).append(",");
             sb.append(finding.getAiPriorityScore() != null ? finding.getAiPriorityScore() : "").append(",");
             sb.append(escapeCsv(finding.getStatus())).append(",");
             sb.append(escapeCsv(finding.getAffectedUrl())).append(",");
@@ -388,6 +393,9 @@ public class ReportService {
                 .append("<div class='section-title'><div class='section-kicker'>01 · Executive overview</div><h2>Assessment summary</h2></div>")
                 .append("<div class='overview'><div class='meta-label'>Overall risk rating</div><div class='risk-label'>").append(escapeHtml(risk)).append("</div>")
                 .append("<p class='small muted'>Rating reflects the highest raw scanner severity recorded in this report. AI suggestions are supplemental and do not replace scanner evidence.</p></div>")
+                .append(summary.isAiEnrichmentCancelled()
+                        ? "<p class='small muted'>AI enrichment was skipped by the analyst. Scanner findings and evidence are included; AI descriptions and recommendations are omitted.</p>"
+                        : "")
                 .append("<table class='metrics'><tr>")
                 .append(metricCell("Findings", summary.getTotalFindings()))
                 .append(metricCell("Open", summary.getOpenFindings()))
@@ -481,6 +489,9 @@ public class ReportService {
                 .append("<span class='pill ").append(severityClass(severity)).append("'>").append(escapeHtml(severity)).append("</span>");
         if (finding.getAiSeverity() != null && !finding.getAiSeverity().isBlank()) {
             detail.append("<div class='detail-id' style='margin-top:5pt'>AI assessment: ").append(escapeHtml(finding.getAiSeverity())).append("</div>");
+        }
+        if ("SKIPPED".equalsIgnoreCase(finding.getAiEnrichmentStatus())) {
+            detail.append("<div class='detail-id' style='margin-top:5pt'>AI enrichment: Skipped by analyst</div>");
         }
         if (finding.getAiPriorityScore() != null) {
             detail.append("<div class='priority' style='margin-top:4pt'>Priority ").append(finding.getAiPriorityScore()).append("/10</div>");

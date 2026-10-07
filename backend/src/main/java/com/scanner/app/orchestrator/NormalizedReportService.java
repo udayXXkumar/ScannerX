@@ -39,6 +39,7 @@ public class NormalizedReportService {
             entry.setType(valueOrFallback(finding.getTitle(), "Security Result"));
             entry.setSeverity(normalizeSeverity(finding.getSeverity()));
             entry.setAiSeverity(finding.getAiSeverity());
+            entry.setAiEnrichmentStatus(finding.getAiEnrichmentStatus());
             entry.setAiPriorityScore(finding.getAiPriorityScore());
             entry.setAiPriorityReason(finding.getAiPriorityReason());
             entry.setDuplicate(finding.getAiDuplicateOfId() != null);
@@ -54,6 +55,7 @@ public class NormalizedReportService {
         report.setTarget(scan.getTarget() != null ? scan.getTarget().getBaseUrl() : "");
         report.setTier(ScanTier.fromTargetValue(scan.getTier()).name().toLowerCase(Locale.ROOT));
         report.setStatus(normalizeStatus(scan.getStatus()));
+        report.setAiEnrichmentCancelled(Boolean.TRUE.equals(scan.getAiEnrichmentCancelled()));
         report.setFindings(List.copyOf(deduped.values()));
         populateSummary(report);
         return report;

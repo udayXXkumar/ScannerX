@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   cancelScan,
+  cancelScanAiEnrichment,
   deleteScan,
   downloadScanReportCsv,
   downloadScanReportJson,
@@ -130,6 +131,22 @@ const ScanDetail = () => {
     },
   })
 
+  const cancelAiMutation = useMutation({
+    mutationFn: () => cancelScanAiEnrichment(id),
+    onSuccess: (nextScan) => {
+      mergeScanIntoWorkspace(queryClient, nextScan)
+      invalidateWorkspaceData(queryClient, {
+        includeFindings: true,
+        includeReports: true,
+        scanId: id,
+      })
+    },
+    onError: (error) => {
+      if (isConfirmedUnauthorizedError(error)) return
+      window.alert(getErrorMessage(error, 'Unable to skip AI enrichment right now.'))
+    },
+  })
+
   const { events, isConnected } = useScanWebSocket(id)
 
   const latestProgressEvent = useMemo(
@@ -213,7 +230,7 @@ const ScanDetail = () => {
     [activityRecords, events],
   )
 
-  const displayStatus = latestStatusEvent?.data?.status || scan?.status
+  const displayStatus = scan?.status || latestStatusEvent?.data?.status
   const displayProgress = useMemo(() => {
     const progressPayload = latestProgressEvent?.data
     const fallbackProgress = Number(latestStatusEvent?.data?.progress ?? scan?.progress ?? 0)
@@ -264,6 +281,7 @@ const ScanDetail = () => {
   const showPause = status === 'QUEUED' || status === 'RUNNING'
   const showResume = status === 'PAUSED'
   const showCancel = isActiveScanStatus(status)
+  const showCancelAi = showCancel && !Boolean(scan?.aiEnrichmentCancelled)
   const showDelete = !isLoading && scan && !showCancel
 
   if (isLoading) {
@@ -328,6 +346,17 @@ const ScanDetail = () => {
               >
                 <Play className="mr-2 h-4 w-4 fill-current" />
                 {resumeMutation.isPending ? 'Resuming...' : 'Resume Scan'}
+              </button>
+            ) : null}
+            {showCancelAi ? (
+              <button
+                onClick={() => cancelAiMutation.mutate()}
+                disabled={cancelAiMutation.isPending}
+                title="Cancel AI enrichment and let scanner work finish. The report will mark AI as skipped."
+                className="inline-flex items-center rounded-md border border-border-subtle bg-bg-panel px-4 py-2 text-sm font-medium text-gray-100 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Info className="mr-2 h-4 w-4" />
+                {cancelAiMutation.isPending ? 'Cancelling AI...' : 'Cancel AI & Finish'}
               </button>
             ) : null}
             {showCancel ? (

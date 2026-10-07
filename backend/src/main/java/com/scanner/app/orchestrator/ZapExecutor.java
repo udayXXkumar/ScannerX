@@ -1,5 +1,6 @@
 package com.scanner.app.orchestrator;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scanner.app.domain.Scan;
 import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.service.FindingService;
@@ -8,8 +9,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Component
@@ -17,17 +20,20 @@ public class ZapExecutor extends AbstractFindingExecutor {
 
     private final ZapDaemonManager zapDaemonManager;
     private final ZapApiClient zapApiClient;
+    private final ObjectMapper objectMapper;
 
     public ZapExecutor(
             FindingService findingService,
             ToolExecutionService toolExecutionService,
             ZapDaemonManager zapDaemonManager,
             ZapApiClient zapApiClient,
-            FindingEnrichmentService findingEnrichmentService
+            FindingEnrichmentService findingEnrichmentService,
+            ObjectMapper objectMapper
     ) {
         super(findingService, toolExecutionService, findingEnrichmentService);
         this.zapDaemonManager = zapDaemonManager;
         this.zapApiClient = zapApiClient;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -161,7 +167,27 @@ public class ZapExecutor extends AbstractFindingExecutor {
             List<ZapApiClient.ZapAlert> alerts,
             String category
     ) {
+        Map<String, List<ZapApiClient.ZapAlert>> groupedAlerts = new LinkedHashMap<>();
         for (ZapApiClient.ZapAlert alert : alerts) {
+            String key = String.join("|",
+                    firstNonBlank(alert.name(), "Security Result").trim().toLowerCase(Locale.ROOT),
+                    firstNonBlank(alert.risk(), alert.riskDescription()).trim().toLowerCase(Locale.ROOT),
+                    firstNonBlank(alert.parameter(), "").trim().toLowerCase(Locale.ROOT));
+            groupedAlerts.computeIfAbsent(key, ignored -> new java.util.ArrayList<>()).add(alert);
+        }
+
+        for (List<ZapApiClient.ZapAlert> instances : groupedAlerts.values()) {
+            ZapApiClient.ZapAlert alert = instances.get(0);
+            List<String> sampleUrls = instances.stream().map(ZapApiClient.ZapAlert::url)
+                    .filter(url -> url != null && !url.isBlank()).distinct().limit(15).toList();
+            String description = buildAlertDescription(alert);
+            if (instances.size() > 1) {
+                description += " Observed in " + instances.size() + " matching alert locations.";
+            }
+            Map<String, Object> evidence = new LinkedHashMap<>();
+            evidence.put("alertCount", instances.size());
+            evidence.put("sampleUrls", sampleUrls);
+            evidence.put("sampleEvidence", instances.stream().limit(5).map(ZapApiClient.ZapAlert::rawJson).toList());
             saveFinding(
                     scan,
                     eventPublisher,
@@ -169,11 +195,19 @@ public class ZapExecutor extends AbstractFindingExecutor {
                     "ZAP",
                     category,
                     firstNonBlank(alert.name(), "Security Result"),
-                    normalizeZapSeverity(alert.risk(), alert.riskDescription(), alert.confidence(), alert.confidenceDescription()),
-                    firstNonBlank(alert.url(), targetUrl),
-                    buildAlertDescription(alert),
-                    alert.rawJson()
+                    normalizeZapSeverity(alert.risk(), alert.riskDescription()),
+                    targetUrl,
+                    description,
+                    serializeEvidence(evidence)
             );
+        }
+    }
+
+    private String serializeEvidence(Map<String, Object> evidence) {
+        try {
+            return objectMapper.writeValueAsString(evidence);
+        } catch (Exception exception) {
+            return evidence.toString();
         }
     }
 
@@ -265,19 +299,16 @@ public class ZapExecutor extends AbstractFindingExecutor {
         builder.append(value.trim());
     }
 
-    private String normalizeZapSeverity(String risk, String riskDescription, String confidence, String confidenceDescription) {
-        String combined = String.join(" ",
-                firstNonBlank(risk, ""),
-                firstNonBlank(riskDescription, ""),
-                firstNonBlank(confidence, ""),
-                firstNonBlank(confidenceDescription, "")
-        ).toUpperCase(Locale.ROOT);
-
-        if (combined.contains("CRITICAL")) return "CRITICAL";
-        if (combined.contains("HIGH")) return "HIGH";
-        if (combined.contains("MEDIUM")) return "MEDIUM";
-        if (combined.contains("LOW")) return "LOW";
-        return "INFO";
+    private String normalizeZapSeverity(String risk, String riskDescription) {
+        String normalized = firstNonBlank(risk, riskDescription, "informational").trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "critical", "severe" -> "CRITICAL";
+            case "high" -> "HIGH";
+            case "medium", "moderate" -> "MEDIUM";
+            case "low" -> "LOW";
+            case "informational", "info", "informative" -> "INFO";
+            default -> "INFO";
+        };
     }
 
     private String firstNonBlank(String... values) {

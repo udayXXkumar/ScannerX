@@ -1,0 +1,1 @@
+ALTER TABLE scans ADD COLUMN ai_enrichment_cancelled BOOLEAN NOT NULL DEFAULT FALSE;

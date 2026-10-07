@@ -15,6 +15,7 @@ import com.scanner.app.repository.TargetRepository;
 import com.scanner.app.repository.NotificationRepository;
 import com.scanner.app.repository.UserRepository;
 import com.scanner.app.service.ScanActivityService;
+import com.scanner.app.service.FindingEnrichmentService;
 import com.scanner.app.websocket.EventPublisher;
 import com.scanner.app.orchestrator.ToolExecutionService;
 import jakarta.transaction.Transactional;
@@ -44,6 +45,7 @@ public class ScanController {
     private final EventPublisher eventPublisher;
     private final ToolExecutionService toolExecutionService;
     private final TierRuntimeAvailabilityService tierRuntimeAvailabilityService;
+    private final FindingEnrichmentService findingEnrichmentService;
 
     public ScanController(
             ScanRepository scanRepository,
@@ -56,7 +58,8 @@ public class ScanController {
             ScanActivityService scanActivityService,
             EventPublisher eventPublisher,
             ToolExecutionService toolExecutionService,
-            TierRuntimeAvailabilityService tierRuntimeAvailabilityService
+            TierRuntimeAvailabilityService tierRuntimeAvailabilityService,
+            FindingEnrichmentService findingEnrichmentService
     ) {
         this.scanRepository = scanRepository;
         this.scanProducer = scanProducer;
@@ -69,6 +72,7 @@ public class ScanController {
         this.eventPublisher = eventPublisher;
         this.toolExecutionService = toolExecutionService;
         this.tierRuntimeAvailabilityService = tierRuntimeAvailabilityService;
+        this.findingEnrichmentService = findingEnrichmentService;
     }
 
     @GetMapping
@@ -120,6 +124,7 @@ public class ScanController {
         scan.setStatus("QUEUED");
         scan.setProgress(0);
         scan.setPauseRequested(Boolean.FALSE);
+        scan.setAiEnrichmentCancelled(Boolean.FALSE);
         scan.setCurrentStageOrder(null);
         scan.setResumeStageOrder(1);
         scan.setExecutionContextJson(null);
@@ -222,15 +227,44 @@ public class ScanController {
             statusPayload.put("currentStageOrder", scan.getResumeStageOrder());
             statusPayload.put("message", "Scan paused.");
             eventPublisher.publishScanStatus(scan.getId(), statusPayload);
-            return ResponseEntity.ok(scan);
+            return buildScanResponse(scan.getId(), currentUser.get().getId());
         }
 
         scan.setStatus("PAUSING");
         scan.setPauseRequested(Boolean.TRUE);
         scan.setUpdatedAt(LocalDateTime.now());
         scanRepository.save(scan);
-        toolExecutionService.stopActiveProcesses(scan.getId());
+        findingEnrichmentService.wakeScanWaiters();
         return buildScanResponse(scan.getId(), currentUser.get().getId());
+    }
+
+    @PostMapping("/{id}/ai-enrichment/cancel")
+    public ResponseEntity<?> cancelAiEnrichment(@PathVariable Long id, Authentication authentication) {
+        Optional<User> currentUser = resolveCurrentUser(authentication);
+        if (currentUser.isEmpty()) return ResponseEntity.status(401).build();
+
+        Optional<Scan> scanOptional = scanRepository.findByIdAndUserId(id, currentUser.get().getId());
+        if (scanOptional.isEmpty()) return ResponseEntity.notFound().build();
+        Scan scan = scanOptional.get();
+        String status = String.valueOf(scan.getStatus()).toUpperCase();
+        if (!ACTIVE_SCAN_STATUSES.contains(status)) {
+            return ResponseEntity.status(409).body(Map.of("message", "AI enrichment can only be skipped while a scan is active."));
+        }
+
+        if (!Boolean.TRUE.equals(scan.getAiEnrichmentCancelled())) {
+            scan.setAiEnrichmentCancelled(Boolean.TRUE);
+            scan.setUpdatedAt(LocalDateTime.now());
+            scanRepository.save(scan);
+            findingEnrichmentService.cancelScanEnrichment(id);
+            eventPublisher.publishScanEvent(id, "AI_ENRICHMENT_CANCELLED", "AI enrichment skipped; scanner work will continue.");
+            Map<String, Object> statusPayload = new HashMap<>();
+            statusPayload.put("status", scan.getStatus());
+            statusPayload.put("progress", scan.getProgress() == null ? 0 : scan.getProgress());
+            statusPayload.put("aiEnrichmentCancelled", true);
+            statusPayload.put("message", "AI enrichment skipped. Scan continues without AI enrichment.");
+            eventPublisher.publishScanStatus(id, statusPayload);
+        }
+        return buildScanResponse(id, currentUser.get().getId());
     }
 
     @PostMapping("/{id}/resume")

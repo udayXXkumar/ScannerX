@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class TierScanEngine {
 
     private static final Logger log = LoggerFactory.getLogger(TierScanEngine.class);
-    private static final Duration STEP_HEARTBEAT_INTERVAL = Duration.ofSeconds(5);
+    private static final Duration STEP_HEARTBEAT_INTERVAL = Duration.ofSeconds(1);
 
     private final ScanRepository scanRepository;
     private final TierPlanRegistry tierPlanRegistry;
@@ -128,6 +128,15 @@ public class TierScanEngine {
         } catch (Exception exception) {
             log.warn("Scan {} blocked before execution due to tier runtime preflight failure", scanId, exception);
             finishFailed(scanId, context, notificationUser, TierRuntimeAvailabilityService.USER_SAFE_TIER_UNAVAILABLE_MESSAGE);
+            return;
+        }
+
+        scan = refreshScan(scanId, scan);
+        if (scan == null || isCancelled(scan) || "PAUSED".equalsIgnoreCase(scan.getStatus())) {
+            return;
+        }
+        if (isPauseRequested(scan)) {
+            pauseScan(scan, scan.getCurrentStageOrder() == null ? 1 : scan.getCurrentStageOrder());
             return;
         }
 
@@ -363,7 +372,7 @@ public class TierScanEngine {
                 }
 
                 publishScanProgress(latestScan, context, processedSteps, totalSteps, stage.order(), step, stepStartedAt);
-            }, STEP_HEARTBEAT_INTERVAL.toMillis(), STEP_HEARTBEAT_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
+            }, 0, STEP_HEARTBEAT_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
 
             try {
                 Future<StepExecutionResult> stepFuture = stepExecutor.submit(() -> executor.execute(scan, step, context, eventPublisher));
@@ -480,14 +489,24 @@ public class TierScanEngine {
         }
 
         boolean aiEnrichmentActive = findingEnrichmentService != null && findingEnrichmentService.isReadyToRun();
-        if (aiEnrichmentActive) {
+        if (aiEnrichmentActive && !Boolean.TRUE.equals(scan.getAiEnrichmentCancelled())) {
             scan.setProgress(90);
             scan.setUpdatedAt(LocalDateTime.now());
             saveScan(scan);
             publishAiEnrichmentProgress(scanId, context, 0, 1);
             eventPublisher.publishScanEvent(scanId, "LOG", "[ai] Waiting for in-flight enrichment and processing any remaining findings.");
             findingEnrichmentService.enrichScanFindings(scanId, ScanTier.fromTargetValue(scan.getTier()),
-                    (completed, total) -> publishAiEnrichmentProgress(scanId, context, completed, total));
+                    (completed, total) -> publishAiEnrichmentProgress(scanId, context, completed, total),
+                    () -> {
+                        Scan latest = refreshScan(scanId, null);
+                        return latest == null || isCancelled(latest) || isPauseRequested(latest);
+                    });
+            scan = refreshScan(scanId, scan);
+            if (scan == null || isCancelled(scan)) return;
+            if (isPauseRequested(scan)) {
+                pauseScan(scan, scan.getCurrentStageOrder() == null ? 1 : scan.getCurrentStageOrder());
+                return;
+            }
         }
         NormalizedScanReport report = persistNormalizedReportSafely(scanId, scan);
         scan.setStatus("COMPLETED");

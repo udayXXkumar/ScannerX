@@ -10,6 +10,7 @@ public class NormalizedScanReport {
     private String target;
     private String tier;
     private String status;
+    private boolean aiEnrichmentCancelled;
     private Summary summary = new Summary();
     private List<FindingEntry> findings = new ArrayList<>();
 
@@ -27,6 +28,7 @@ public class NormalizedScanReport {
         private String type;
         private String severity;
         private String aiSeverity;
+        private String aiEnrichmentStatus;
         private Integer aiPriorityScore;
         private String aiPriorityReason;
         private boolean duplicate;
