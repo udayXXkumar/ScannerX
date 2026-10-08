@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "capturedAtUtc": "2026-10-07T19:19:16.773416+00:00",
+  "host": {
+    "platform": "Linux-7.1.5+kali-amd64-x86_64-with-glibc2.43"
+  },
+  "tools": {
+    "httpx": {
+      "path": "/usr/bin/httpx",
+      "probe": {
+        "exitCode": 2,
+        "output": "Usage: httpx [OPTIONS] URL\n\nError: No such option: -e"
+      }
+    },
+    "whatweb": {
+      "path": "/usr/bin/whatweb",
+      "probe": {
+        "exitCode": 0,
+        "output": "WhatWeb version 0.6.4 ( https://morningstarsecurity.com/research/whatweb/ )"
+      }
+    },
+    "ffuf": {
+      "path": "/usr/bin/ffuf",
+      "probe": {
+        "exitCode": 0,
+        "output": "ffuf version: 2.1.0-dev"
+      }
+    },
+    "nuclei": {
+      "path": "/usr/local/bin/nuclei",
+      "probe": {
+        "exitCode": 0,
+        "output": "[\u001b[34mINF\u001b[0m] Nuclei Engine Version: v3.7.1\n[\u001b[34mINF\u001b[0m] Nuclei Config Directory: /home/kali/.config/nuclei\n[\u001b[34mINF\u001b[0m] Nuclei Cache Directory: /home/kali/.cache/nuclei\n[\u001b[34mINF\u001b[0m] PDCP Directory: /home/kali/.pdcp"
+      }
+    },
+    "nikto": {
+      "path": "/usr/bin/nikto",
+      "probe": {
+        "exitCode": 0,
+        "output": "Nikto 2.6.1 (LW 2.5)"
+      }
+    },
+    "dalfox": {
+      "path": "/usr/local/bin/dalfox",
+      "probe": {
+        "exitCode": 0,
+        "output": "\u2591\u2588\u2592               \n             \u2588\u2588\u2588\u2588     \u2593                    \n           \u2593\u2588\u2588\u2588\u2588\u2588  \u2593\u2588\u2588\u2593                  \n          \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588         \u2591          \n        \u2591\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2593          \u2593\u2591     \n     \u2591\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588        \u2592\u2588\u2588\u2591    \n    \u2593\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2592\u2588\u2588\u2588\u2588\u2588\u2588\u2588     \u2591\u2588\u2588\u2588\u2588\u2588\u2593\u2591    \n   \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2591 \u2588\u2588\u2588\u2588        \u2588\u2593     \n \u2591\u2588\u2588\u2588\u2588\u2588\u2593          \u2591\u2588\u2588\u2588\u2588\u2592       \u2591         Dalfox v2.13.0\n \u2588\u2588\u2588\u2588\u2588               \u2593\u2588\u2588\u2591             \n \u2588\u2588\u2588\u2588                  \u2593\u2588\u2588      Powerful open-source XSS scanner       \n \u2588\u2588\u2588\u2593        \u2593\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2593\u2592\u2593\u2588\u2591     and utility focused on automation.       \n \u2588\u2588\u2588\u2592      \u2588\u2588\u2588\u2588\u2588                     \n \u2593\u2588\u2588\u2588     \u2588\u2588\u2588\u2588\u2588\u2588                    \n \u2588\u2588\u2588\u2588     \u2588\u2588\u2588\u2588\u2588\u2588\u2592                \n \u2591\u2588\u2588\u2588\u2588    \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2592\n \n\n\u001b[93mv2.13.0\u001b[0m"
+      }
+    },
+    "sqlmap": {
+      "path": "/usr/bin/sqlmap",
+      "probe": {
+        "exitCode": 0,
+        "output": "1.10.9#stable"
+      }
+    },
+    "zaproxy": {
+      "path": "/usr/bin/zaproxy",
+      "probe": {
+        "error": "TimeoutExpired: Command '['/usr/bin/zaproxy', '-version']' timed out after 8 seconds"
+      }
+    }
+  },
+  "dockerImageDigests": []
+}

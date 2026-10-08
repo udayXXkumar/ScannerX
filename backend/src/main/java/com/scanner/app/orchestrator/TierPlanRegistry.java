@@ -64,7 +64,12 @@ public class TierPlanRegistry {
                                 )),
                                 step("nikto", "Server Checks", 20, timeout(timeoutsEnabled, 240), true),
                                 step("zap-passive", "Passive Verification", 30, timeout(timeoutsEnabled, 120), true)),
-                        stage(6, "Controlled Active Verification", step("zap-active", "Controlled Active Validation", 10, timeout(timeoutsEnabled, 420), false)),
+                        stage(6, "Controlled Active Verification",
+                                step("zap-active", "Controlled Active Validation", 10, timeout(timeoutsEnabled, 300), false),
+                                step("dalfox", "Reflected Input Validation", 20, timeout(timeoutsEnabled, 120), true,
+                                        Map.of("maxTargets", "5")),
+                                step("sqlmap", "Injection Validation", 30, timeout(timeoutsEnabled, 180), true,
+                                        Map.of("batchCount", "2", "perBatchSeconds", "90"))),
                         stage(7, "Final Correlation", step("finalize-report", "Build Report", 10, timeout(timeoutsEnabled, 60), false))
                 )
         );

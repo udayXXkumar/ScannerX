@@ -33,6 +33,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 
 @Service
 public class TierScanEngine {
@@ -451,7 +454,7 @@ public class TierScanEngine {
             return StepExecutionResult.skipped("Scan state changed before the stage could finish.");
         }
         if ("httpx".equals(step.key())) {
-            return StepExecutionResult.fatalFailure("Baseline reachability check failed.");
+            return StepExecutionResult.fatalFailure(baselineFailureMessage(throwable));
         }
         return StepExecutionResult.nonFatalFailure(step.label() + " could not be completed in this environment.", false);
     }
@@ -836,6 +839,29 @@ public class TierScanEngine {
             return message;
         }
         return throwable.getClass().getSimpleName();
+    }
+
+    private String baselineFailureMessage(Throwable throwable) {
+        Throwable rootCause = throwable;
+        while (rootCause != null && rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+            rootCause = rootCause.getCause();
+        }
+
+        String reason;
+        if (rootCause instanceof UnknownHostException) {
+            reason = "the target hostname could not be resolved";
+        } else if (rootCause instanceof ConnectException) {
+            reason = "the target refused the connection or is not listening on that port";
+        } else if (rootCause instanceof SocketTimeoutException) {
+            reason = "the target did not respond before the connection timeout";
+        } else if (rootCause instanceof javax.net.ssl.SSLException) {
+            reason = "the HTTPS connection could not be established";
+        } else {
+            reason = "the target could not be reached from the ScannerX backend";
+        }
+
+        return "Baseline reachability check failed: " + reason
+                + ". Verify the target URL and confirm it is reachable from the backend host/container.";
     }
 
     private boolean ensureTierBudget(Scan scan, TierPlan plan, ScanExecutionContext context, Integer stageOrder) {

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": "2.0.0",
+  "groundTruthVersion": "juice-shop-v20.2.0-scoped-v2.0.0",
+  "benchmark": "ScannerX OWASP Juice Shop unauthenticated automated DAST",
+  "juiceShopVersion": "20.2.0",
+  "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+  "classificationMatrix": "challenge_matrix-v2.0.0.json",
+  "validationArtifact": "validation/validation.json",
+  "instanceApiSnapshots": [
+    {
+      "runName": "fast",
+      "apiSnapshot": "validation/fast-challenge-api.json",
+      "baseUrl": "http://127.0.0.1:3001",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ]
+    },
+    {
+      "runName": "medium",
+      "apiSnapshot": "validation/medium-challenge-api.json",
+      "baseUrl": "http://127.0.0.1:3002",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ]
+    },
+    {
+      "runName": "deep",
+      "apiSnapshot": "validation/deep-challenge-api.json",
+      "baseUrl": "http://127.0.0.1:3003",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ]
+    },
+    {
+      "runName": "deep-repeat",
+      "apiSnapshot": "validation/deep-repeat-challenge-api.json",
+      "baseUrl": "http://127.0.0.1:3004",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ]
+    }
+  ],
+  "groundTruthFrozen": true,
+  "scopeComplete": true,
+  "scoringScope": [
+    {
+      "scopeId": "root-response-security-headers",
+      "endpoint": "/",
+      "method": null,
+      "parameter": null,
+      "vulnerabilityClassAliases": [
+        "security misconfiguration",
+        "xss"
+      ],
+      "evidenceAny": [
+        "content-security-policy",
+        "referrer-policy"
+      ]
+    },
+    {
+      "scopeId": "products-search-sqli",
+      "endpoint": "/rest/products/search",
+      "method": "GET",
+      "parameter": "q",
+      "vulnerabilityClassAliases": [
+        "sql injection",
+        "injection (unclassified)",
+        "injection"
+      ],
+      "evidenceAny": [
+        "injectable",
+        "is vulnerable",
+        "sql injection"
+      ]
+    }
+  ],
+  "scoringUnit": "one verified vulnerability/check instance; correlated challenge IDs do not create duplicate instances",
+  "authentication": "unauthenticated; no account/session supplied",
+  "instances": [
+    {
+      "instanceId": "js20-root-missing-csp",
+      "sourceType": "runtime-http-configuration-check",
+      "challengeIds": [],
+      "vulnerabilityClass": "security misconfiguration",
+      "vulnerabilityClassAliases": [
+        "xss"
+      ],
+      "endpoint": "/",
+      "method": null,
+      "parameter": null,
+      "detectionType": "automatically-detectable",
+      "severity": "LOW",
+      "enabled": true,
+      "validated": true,
+      "evidenceContains": [
+        "content-security-policy"
+      ],
+      "validation": "No Content-Security-Policy response header observed on GET / in all four isolated instances; independently captured response headers and matching ZAP/Nikto alert evidence are retained.",
+      "validationFiles": [
+        "validation/fast-root-response.json",
+        "validation/medium-root-response.json",
+        "validation/deep-root-response.json",
+        "validation/deep-repeat-root-response.json"
+      ]
+    },
+    {
+      "instanceId": "js20-root-missing-referrer-policy",
+      "sourceType": "runtime-http-configuration-check",
+      "challengeIds": [],
+      "vulnerabilityClass": "security misconfiguration",
+      "endpoint": "/",
+      "method": null,
+      "parameter": null,
+      "detectionType": "automatically-detectable",
+      "severity": "LOW",
+      "enabled": true,
+      "validated": true,
+      "evidenceContains": [
+        "referrer-policy"
+      ],
+      "validation": "No Referrer-Policy response header observed on GET / in all four isolated instances; independently captured response headers are retained.",
+      "validationFiles": [
+        "validation/fast-root-response.json",
+        "validation/medium-root-response.json",
+        "validation/deep-root-response.json",
+        "validation/deep-repeat-root-response.json"
+      ]
+    },
+    {
+      "instanceId": "js20-sqli-products-search-q",
+      "sourceType": "official-challenge-and-independent-active-probe",
+      "challengeIds": [
+        "unionSqlInjectionChallenge"
+      ],
+      "alsoRelatedChallengeIds": [
+        "dbSchemaChallenge"
+      ],
+      "vulnerabilityClass": "SQL injection",
+      "vulnerabilityClassAliases": [
+        "injection (unclassified)",
+        "sql injection"
+      ],
+      "endpoint": "/rest/products/search",
+      "method": "GET",
+      "parameter": "q",
+      "detectionType": "specialized-active",
+      "severity": "HIGH",
+      "enabled": true,
+      "validated": true,
+      "evidenceRegex": "(?i)GET parameter ['\\\"]?q['\\\"]?.{0,100}(vulnerable|injectable)",
+      "validation": "SQLMap 1.10.9 independently confirmed boolean/error-based injection on q in all four pinned instances. Probe used --level=2 --risk=1 --technique=BE; no data dumping, stacked queries, or time-based payloads. Official v20.2.0 route source marks this search query as the sink for unionSqlInjectionChallenge and dbSchemaChallenge.",
+      "validationFiles": [
+        "validation/fast-sqlmap.txt",
+        "validation/medium-sqlmap.txt",
+        "validation/deep-sqlmap.txt",
+        "validation/deep-repeat-sqlmap.txt"
+      ]
+    }
+  ],
+  "excludedChallengeCategories": [
+    "manual/application-logic",
+    "out-of-scope",
+    "authenticated instances",
+    "challenges disabled in Docker"
+  ],
+  "unavailableReason": null,
+  "warning": "Metrics using this file describe only the listed scoped checks, not global Juice Shop precision/recall."
+}

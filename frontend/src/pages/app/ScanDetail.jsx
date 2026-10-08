@@ -165,10 +165,14 @@ const ScanDetail = () => {
       .map((event) => event.data)
       .reverse()
 
-    const persistedFindings = Array.isArray(reportData?.findings) ? [...reportData.findings].reverse() : []
+    // The report endpoint applies the same deduplication used after navigating
+    // back to this page. Do not merge raw websocket events into it: doing so
+    // reintroduced duplicate rows and inflated the live count.
+    const hasCanonicalReport = Array.isArray(reportData?.findings)
+    const persistedFindings = hasCanonicalReport ? [...reportData.findings].reverse() : liveFindings
     const findingsByKey = new Map()
 
-    ;[...persistedFindings, ...liveFindings].forEach((finding, index) => {
+    persistedFindings.forEach((finding, index) => {
       if (!finding) {
         return
       }

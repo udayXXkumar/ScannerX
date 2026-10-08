@@ -4,6 +4,7 @@ import com.scanner.app.domain.Scan;
 import com.scanner.app.domain.User;
 import com.scanner.app.orchestrator.NormalizedReportService;
 import com.scanner.app.orchestrator.NormalizedScanReport;
+import com.scanner.app.orchestrator.ResearchScanReport;
 import com.scanner.app.repository.ScanRepository;
 import com.scanner.app.repository.UserRepository;
 import com.scanner.app.service.ReportService;
@@ -68,6 +69,19 @@ public class ReportController {
         }
 
         return ResponseEntity.ok(normalizedReportService.readReport(scan.get()));
+    }
+
+    @GetMapping("/scans/{scanId}/research.json")
+    public ResponseEntity<ResearchScanReport> getScanResearchReport(@PathVariable Long scanId, Authentication authentication) {
+        Optional<User> currentUser = resolveCurrentUser(authentication);
+        if (currentUser.isEmpty()) {
+            return ResponseEntity.status(401).build();
+        }
+        Optional<Scan> scan = scanRepository.findWithContextByIdAndUserId(scanId, currentUser.get().getId());
+        if (scan.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(normalizedReportService.buildResearchReport(scan.get()));
     }
 
     @GetMapping(value = "/scans/{scanId}/summary/executive", produces = MediaType.TEXT_HTML_VALUE)

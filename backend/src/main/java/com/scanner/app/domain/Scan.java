@@ -32,7 +32,7 @@ public class Scan {
     private Integer riskScore;
     private Boolean timeoutsEnabled;
     private Boolean pauseRequested;
-    @Column(name = "ai_enrichment_cancelled", nullable = false)
+    @Column(name = "ai_enrichment_cancelled", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
     private Boolean aiEnrichmentCancelled = Boolean.FALSE;
     private Integer currentStageOrder;
     private Integer resumeStageOrder;

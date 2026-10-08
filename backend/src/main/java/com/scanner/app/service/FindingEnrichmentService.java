@@ -7,6 +7,7 @@ import com.scanner.app.repository.ScanRepository;
 import com.scanner.app.websocket.EventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -51,6 +52,7 @@ public class FindingEnrichmentService {
     private final ConcurrentMap<Long, Object> scanCancellationLocks = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, java.util.Set<Thread>> activeWorkersByScan = new ConcurrentHashMap<>();
 
+    @Autowired
     public FindingEnrichmentService(
             FindingRepository findingRepository,
             ScanRepository scanRepository,

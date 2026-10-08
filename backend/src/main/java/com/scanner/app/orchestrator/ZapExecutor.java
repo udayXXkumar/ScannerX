@@ -169,6 +169,9 @@ public class ZapExecutor extends AbstractFindingExecutor {
     ) {
         Map<String, List<ZapApiClient.ZapAlert>> groupedAlerts = new LinkedHashMap<>();
         for (ZapApiClient.ZapAlert alert : alerts) {
+            if (isSocketIoTransportSessionId(alert)) {
+                continue;
+            }
             String key = String.join("|",
                     firstNonBlank(alert.name(), "Security Result").trim().toLowerCase(Locale.ROOT),
                     firstNonBlank(alert.risk(), alert.riskDescription()).trim().toLowerCase(Locale.ROOT),
@@ -200,6 +203,22 @@ public class ZapExecutor extends AbstractFindingExecutor {
                     description,
                     serializeEvidence(evidence)
             );
+        }
+    }
+
+    static boolean isSocketIoTransportSessionId(ZapApiClient.ZapAlert alert) {
+        if (alert == null || alert.url() == null || alert.parameter() == null) {
+            return false;
+        }
+        if (!"Session ID in URL Rewrite".equalsIgnoreCase(alert.name())
+                || !"sid".equalsIgnoreCase(alert.parameter())) {
+            return false;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(alert.url());
+            return uri.getPath() != null && uri.getPath().toLowerCase(Locale.ROOT).contains("/socket.io/");
+        } catch (IllegalArgumentException ignored) {
+            return false;
         }
     }
 

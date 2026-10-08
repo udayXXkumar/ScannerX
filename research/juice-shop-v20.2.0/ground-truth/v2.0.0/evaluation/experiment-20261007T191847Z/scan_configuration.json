@@ -1,0 +1,595 @@
+[
+  {
+    "runName": "scannerx-juice-fast-20261007T191847Z",
+    "scanId": 41,
+    "scanTier": "fast",
+    "scanConfiguration": {
+      "tier": "fast",
+      "timeoutsEnabled": true,
+      "hardTimeoutSeconds": 300,
+      "stages": [
+        {
+          "label": "Preparation",
+          "steps": [
+            {
+              "key": "normalize-url",
+              "label": "Normalize URL",
+              "retryable": false,
+              "timeoutSeconds": null,
+              "settings": {}
+            }
+          ],
+          "order": 1
+        },
+        {
+          "label": "Baseline",
+          "steps": [
+            {
+              "key": "httpx",
+              "label": "Reachability",
+              "retryable": false,
+              "timeoutSeconds": 20,
+              "settings": {}
+            },
+            {
+              "key": "whatweb",
+              "label": "Fingerprinting",
+              "retryable": false,
+              "timeoutSeconds": 30,
+              "settings": {}
+            }
+          ],
+          "order": 2
+        },
+        {
+          "label": "Passive Checks",
+          "steps": [
+            {
+              "key": "zap-baseline",
+              "label": "Passive Baseline",
+              "retryable": false,
+              "timeoutSeconds": 60,
+              "settings": {
+                "maxChildren": "25"
+              }
+            },
+            {
+              "key": "nuclei-root",
+              "label": "Root Checks",
+              "retryable": true,
+              "timeoutSeconds": 60,
+              "settings": {}
+            }
+          ],
+          "order": 3
+        },
+        {
+          "label": "Light Discovery",
+          "steps": [
+            {
+              "key": "light-crawler",
+              "label": "Light Discovery",
+              "retryable": true,
+              "timeoutSeconds": 20,
+              "settings": {
+                "maxUrls": "30",
+                "depth": "2"
+              }
+            }
+          ],
+          "order": 4
+        },
+        {
+          "label": "Re-scan Discovered Endpoints",
+          "steps": [
+            {
+              "key": "nuclei-discovered",
+              "label": "Endpoint Checks",
+              "retryable": false,
+              "timeoutSeconds": 60,
+              "settings": {
+                "batchSize": "4",
+                "batchTimeoutSeconds": "18",
+                "maxTargets": "8",
+                "targetSource": "discovered"
+              }
+            }
+          ],
+          "order": 5
+        },
+        {
+          "label": "Final Correlation",
+          "steps": [
+            {
+              "key": "finalize-report",
+              "label": "Build Report",
+              "retryable": false,
+              "timeoutSeconds": 20,
+              "settings": {}
+            }
+          ],
+          "order": 6
+        }
+      ]
+    },
+    "toolVersions": {
+      "httpx": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "whatweb": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "ffuf": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nuclei": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nikto": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "zap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "dalfox": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "sqlmap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py"
+    }
+  },
+  {
+    "runName": "scannerx-juice-medium-20261007T191847Z",
+    "scanId": 42,
+    "scanTier": "medium",
+    "scanConfiguration": {
+      "tier": "medium",
+      "timeoutsEnabled": true,
+      "hardTimeoutSeconds": 2700,
+      "stages": [
+        {
+          "label": "Baseline",
+          "steps": [
+            {
+              "key": "httpx",
+              "label": "Reachability",
+              "retryable": false,
+              "timeoutSeconds": 20,
+              "settings": {}
+            },
+            {
+              "key": "whatweb",
+              "label": "Fingerprinting",
+              "retryable": false,
+              "timeoutSeconds": 30,
+              "settings": {}
+            }
+          ],
+          "order": 1
+        },
+        {
+          "label": "Bounded Discovery Expansion",
+          "steps": [
+            {
+              "key": "ffuf-medium",
+              "label": "Bounded Discovery",
+              "retryable": true,
+              "timeoutSeconds": 120,
+              "settings": {
+                "mode": "medium",
+                "recursion": "false",
+                "threads": "15",
+                "rate": "50"
+              }
+            }
+          ],
+          "order": 2
+        },
+        {
+          "label": "Crawl",
+          "steps": [
+            {
+              "key": "zap-spider",
+              "label": "Crawl",
+              "retryable": true,
+              "timeoutSeconds": 150,
+              "settings": {
+                "maxChildren": "90"
+              }
+            },
+            {
+              "key": "zap-ajax",
+              "label": "JavaScript Crawl",
+              "retryable": true,
+              "timeoutSeconds": 180,
+              "settings": {}
+            }
+          ],
+          "order": 3
+        },
+        {
+          "label": "Asset Classification",
+          "steps": [
+            {
+              "key": "classify-assets",
+              "label": "Classify Assets",
+              "retryable": true,
+              "timeoutSeconds": 45,
+              "settings": {}
+            }
+          ],
+          "order": 4
+        },
+        {
+          "label": "Passive and Server Checks",
+          "steps": [
+            {
+              "key": "nuclei-discovered",
+              "label": "Endpoint Checks",
+              "retryable": false,
+              "timeoutSeconds": 180,
+              "settings": {
+                "batchSize": "6",
+                "batchTimeoutSeconds": "45",
+                "maxTargets": "24",
+                "targetSource": "discovered"
+              }
+            },
+            {
+              "key": "nikto",
+              "label": "Server Checks",
+              "retryable": true,
+              "timeoutSeconds": 240,
+              "settings": {}
+            },
+            {
+              "key": "zap-passive",
+              "label": "Passive Verification",
+              "retryable": true,
+              "timeoutSeconds": 120,
+              "settings": {}
+            }
+          ],
+          "order": 5
+        },
+        {
+          "label": "Controlled Active Verification",
+          "steps": [
+            {
+              "key": "zap-active",
+              "label": "Controlled Active Validation",
+              "retryable": false,
+              "timeoutSeconds": 420,
+              "settings": {}
+            }
+          ],
+          "order": 6
+        },
+        {
+          "label": "Final Correlation",
+          "steps": [
+            {
+              "key": "finalize-report",
+              "label": "Build Report",
+              "retryable": false,
+              "timeoutSeconds": 60,
+              "settings": {}
+            }
+          ],
+          "order": 7
+        }
+      ]
+    },
+    "toolVersions": {
+      "httpx": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "whatweb": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "ffuf": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nuclei": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nikto": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "zap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "dalfox": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "sqlmap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py"
+    }
+  },
+  {
+    "runName": "scannerx-juice-deep-20261007T191847Z",
+    "scanId": 43,
+    "scanTier": "deep",
+    "scanConfiguration": {
+      "tier": "deep",
+      "timeoutsEnabled": true,
+      "hardTimeoutSeconds": 5400,
+      "stages": [
+        {
+          "label": "Baseline",
+          "steps": [
+            {
+              "key": "httpx",
+              "label": "Reachability",
+              "retryable": false,
+              "timeoutSeconds": 20,
+              "settings": {}
+            },
+            {
+              "key": "whatweb",
+              "label": "Fingerprinting",
+              "retryable": false,
+              "timeoutSeconds": 30,
+              "settings": {}
+            }
+          ],
+          "order": 1
+        },
+        {
+          "label": "Deep Discovery",
+          "steps": [
+            {
+              "key": "ffuf-deep",
+              "label": "Recursive Discovery",
+              "retryable": true,
+              "timeoutSeconds": 150,
+              "settings": {
+                "mode": "deep",
+                "recursion": "true",
+                "recursionDepth": "1",
+                "rate": "35",
+                "threads": "20"
+              }
+            },
+            {
+              "key": "expand-scope",
+              "label": "Expand Scope",
+              "retryable": true,
+              "timeoutSeconds": 60,
+              "settings": {}
+            }
+          ],
+          "order": 2
+        },
+        {
+          "label": "Expanded Crawl",
+          "steps": [
+            {
+              "key": "zap-spider",
+              "label": "Crawl",
+              "retryable": true,
+              "timeoutSeconds": 240,
+              "settings": {
+                "maxChildren": "140"
+              }
+            },
+            {
+              "key": "zap-ajax",
+              "label": "JavaScript Crawl",
+              "retryable": true,
+              "timeoutSeconds": 240,
+              "settings": {}
+            }
+          ],
+          "order": 3
+        },
+        {
+          "label": "Full Passive Checks",
+          "steps": [
+            {
+              "key": "nuclei-discovered",
+              "label": "Endpoint Checks",
+              "retryable": false,
+              "timeoutSeconds": 240,
+              "settings": {
+                "batchSize": "8",
+                "batchTimeoutSeconds": "60",
+                "maxTargets": "40",
+                "targetSource": "discovered"
+              }
+            },
+            {
+              "key": "nikto",
+              "label": "Server Checks",
+              "retryable": true,
+              "timeoutSeconds": 300,
+              "settings": {}
+            }
+          ],
+          "order": 4
+        },
+        {
+          "label": "Controlled Attack Validation",
+          "steps": [
+            {
+              "key": "zap-active",
+              "label": "Controlled Active Validation",
+              "retryable": false,
+              "timeoutSeconds": 600,
+              "settings": {}
+            },
+            {
+              "key": "dalfox",
+              "label": "Reflected Input Validation",
+              "retryable": true,
+              "timeoutSeconds": 120,
+              "settings": {}
+            },
+            {
+              "key": "sqlmap",
+              "label": "Injection Validation",
+              "retryable": true,
+              "timeoutSeconds": 300,
+              "settings": {
+                "batchCount": "5",
+                "perBatchSeconds": "60"
+              }
+            }
+          ],
+          "order": 5
+        },
+        {
+          "label": "Final Correlation",
+          "steps": [
+            {
+              "key": "finalize-report",
+              "label": "Build Report",
+              "retryable": false,
+              "timeoutSeconds": 60,
+              "settings": {}
+            }
+          ],
+          "order": 6
+        }
+      ]
+    },
+    "toolVersions": {
+      "httpx": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "whatweb": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "ffuf": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nuclei": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nikto": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "zap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "dalfox": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "sqlmap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py"
+    }
+  },
+  {
+    "runName": "scannerx-juice-deep-repeat-20261007T191847Z",
+    "scanId": 44,
+    "scanTier": "deep",
+    "scanConfiguration": {
+      "tier": "deep",
+      "timeoutsEnabled": true,
+      "hardTimeoutSeconds": 5400,
+      "stages": [
+        {
+          "label": "Baseline",
+          "steps": [
+            {
+              "key": "httpx",
+              "label": "Reachability",
+              "retryable": false,
+              "timeoutSeconds": 20,
+              "settings": {}
+            },
+            {
+              "key": "whatweb",
+              "label": "Fingerprinting",
+              "retryable": false,
+              "timeoutSeconds": 30,
+              "settings": {}
+            }
+          ],
+          "order": 1
+        },
+        {
+          "label": "Deep Discovery",
+          "steps": [
+            {
+              "key": "ffuf-deep",
+              "label": "Recursive Discovery",
+              "retryable": true,
+              "timeoutSeconds": 150,
+              "settings": {
+                "mode": "deep",
+                "recursion": "true",
+                "recursionDepth": "1",
+                "rate": "35",
+                "threads": "20"
+              }
+            },
+            {
+              "key": "expand-scope",
+              "label": "Expand Scope",
+              "retryable": true,
+              "timeoutSeconds": 60,
+              "settings": {}
+            }
+          ],
+          "order": 2
+        },
+        {
+          "label": "Expanded Crawl",
+          "steps": [
+            {
+              "key": "zap-spider",
+              "label": "Crawl",
+              "retryable": true,
+              "timeoutSeconds": 240,
+              "settings": {
+                "maxChildren": "140"
+              }
+            },
+            {
+              "key": "zap-ajax",
+              "label": "JavaScript Crawl",
+              "retryable": true,
+              "timeoutSeconds": 240,
+              "settings": {}
+            }
+          ],
+          "order": 3
+        },
+        {
+          "label": "Full Passive Checks",
+          "steps": [
+            {
+              "key": "nuclei-discovered",
+              "label": "Endpoint Checks",
+              "retryable": false,
+              "timeoutSeconds": 240,
+              "settings": {
+                "batchSize": "8",
+                "batchTimeoutSeconds": "60",
+                "maxTargets": "40",
+                "targetSource": "discovered"
+              }
+            },
+            {
+              "key": "nikto",
+              "label": "Server Checks",
+              "retryable": true,
+              "timeoutSeconds": 300,
+              "settings": {}
+            }
+          ],
+          "order": 4
+        },
+        {
+          "label": "Controlled Attack Validation",
+          "steps": [
+            {
+              "key": "zap-active",
+              "label": "Controlled Active Validation",
+              "retryable": false,
+              "timeoutSeconds": 600,
+              "settings": {}
+            },
+            {
+              "key": "dalfox",
+              "label": "Reflected Input Validation",
+              "retryable": true,
+              "timeoutSeconds": 120,
+              "settings": {}
+            },
+            {
+              "key": "sqlmap",
+              "label": "Injection Validation",
+              "retryable": true,
+              "timeoutSeconds": 300,
+              "settings": {
+                "batchCount": "5",
+                "perBatchSeconds": "60"
+              }
+            }
+          ],
+          "order": 5
+        },
+        {
+          "label": "Final Correlation",
+          "steps": [
+            {
+              "key": "finalize-report",
+              "label": "Build Report",
+              "retryable": false,
+              "timeoutSeconds": 60,
+              "settings": {}
+            }
+          ],
+          "order": 6
+        }
+      ]
+    },
+    "toolVersions": {
+      "httpx": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "whatweb": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "ffuf": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nuclei": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "nikto": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "zap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "dalfox": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py",
+      "sqlmap": "unavailable: capture with research/juice-shop-v20.2.0/tools/capture_toolchain.py"
+    }
+  }
+]

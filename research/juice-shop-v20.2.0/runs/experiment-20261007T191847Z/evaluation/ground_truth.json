@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0",
+  "benchmark": "ScannerX OWASP Juice Shop unauthenticated DAST",
+  "juiceShopVersion": "20.2.0",
+  "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+  "imageDigestKind": "multi-architecture OCI image index",
+  "challengeCatalogueUrl": "https://raw.githubusercontent.com/juice-shop/juice-shop/v20.2.0/data/static/challenges.yml",
+  "challengeCatalogueSha256": "8efa070380ab8f39783eb92cbaaf9df67bcee0f1715eee98a06fb1176051c2b7",
+  "instanceApiSnapshot": "fast/challenge_api.json",
+  "groundTruthFrozen": false,
+  "scoringUnit": "unique vulnerability instance: class + endpoint + method + parameter",
+  "authentication": "unauthenticated",
+  "instances": [],
+  "unavailableReason": "Runtime challenge state is captured, but no enabled challenge has yet been independently validated as an endpoint-level unauthenticated DAST ground-truth instance.",
+  "instanceApiSnapshots": [
+    {
+      "runName": "fast",
+      "apiSnapshot": "fast/challenge_api.json",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "architecture": "amd64",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "challengeCount": 116
+    },
+    {
+      "runName": "medium",
+      "apiSnapshot": "medium/challenge_api.json",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "architecture": "amd64",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "challengeCount": 116
+    },
+    {
+      "runName": "deep",
+      "apiSnapshot": "deep/challenge_api.json",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "architecture": "amd64",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "challengeCount": 116
+    },
+    {
+      "runName": "deep-repeat",
+      "apiSnapshot": "deep-repeat/challenge_api.json",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "architecture": "amd64",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "challengeCount": 116
+    }
+  ]
+}

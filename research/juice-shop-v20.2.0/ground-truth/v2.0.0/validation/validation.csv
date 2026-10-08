@@ -1,0 +1,5 @@
+runName,baseUrl,imageId,challengeApiStatus,sqlInjectionChallengeId,sqlInjectionChallengeEnabled,missingHeaders,sqlmapExitCode,sqlmapBooleanOrErrorBasedInjectionConfirmed,sqlmapEvidenceFile
+fast,http://127.0.0.1:3001,sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc,200,unionSqlInjectionChallenge,True,content-security-policy;referrer-policy,0,True,fast-sqlmap.txt
+medium,http://127.0.0.1:3002,sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc,200,unionSqlInjectionChallenge,True,content-security-policy;referrer-policy,0,True,medium-sqlmap.txt
+deep,http://127.0.0.1:3003,sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc,200,unionSqlInjectionChallenge,True,content-security-policy;referrer-policy,0,True,deep-sqlmap.txt
+deep-repeat,http://127.0.0.1:3004,sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc,200,unionSqlInjectionChallenge,True,content-security-policy;referrer-policy,0,True,deep-repeat-sqlmap.txt

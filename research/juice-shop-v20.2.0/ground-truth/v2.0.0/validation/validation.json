@@ -1,0 +1,230 @@
+{
+  "schemaVersion": "2.0.0",
+  "validatedAtUtc": "2026-10-08T05:55:39.450310+00:00",
+  "benchmark": "ScannerX OWASP Juice Shop unauthenticated DAST",
+  "juiceShopVersion": "20.2.0",
+  "pinnedImage": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+  "method": "Independent unauthenticated HTTP header observation and SQLMap boolean/error-based injection probes; no data dumping or state-changing payloads.",
+  "records": [
+    {
+      "runName": "fast",
+      "baseUrl": "http://127.0.0.1:3001",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "rootResponse": {
+        "statusCode": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "sha256Body": "aa97229042ece5a31ad318e31c256a15ec51a5005a5295580af6bcf6bdf36783",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "feature-policy": "payment 'self'",
+          "x-recruiting": "/#/jobs",
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=0",
+          "last-modified": "Thu, 08 Oct 2026 04:03:32 GMT",
+          "etag": "W/\"24b1-1a119ae3f57\"",
+          "content-type": "text/html; charset=UTF-8",
+          "content-length": "9393",
+          "vary": "Accept-Encoding",
+          "date": "Thu, 08 Oct 2026 05:55:22 GMT",
+          "connection": "close"
+        },
+        "missingHeaders": [
+          "content-security-policy",
+          "referrer-policy"
+        ]
+      },
+      "challengeApiStatus": 200,
+      "sqlInjectionChallengeId": "unionSqlInjectionChallenge",
+      "sqlInjectionChallengeEnabled": true,
+      "sqlmapVersion": "1.10.9#stable",
+      "sqlmapCommand": [
+        "/usr/bin/sqlmap",
+        "-u",
+        "http://127.0.0.1:3001/rest/products/search?q=ScannerXGT",
+        "-p",
+        "q",
+        "--batch",
+        "--level=2",
+        "--risk=1",
+        "--technique=BE",
+        "--flush-session",
+        "--output-dir",
+        "/home/kali/scannerx-backend/ScannerX/research/juice-shop-v20.2.0/ground-truth/v2.0.0/validation/sqlmap/fast"
+      ],
+      "sqlmapExitCode": 0,
+      "sqlmapBooleanOrErrorBasedInjectionConfirmed": true,
+      "sqlmapEvidenceFile": "fast-sqlmap.txt"
+    },
+    {
+      "runName": "medium",
+      "baseUrl": "http://127.0.0.1:3002",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "rootResponse": {
+        "statusCode": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "sha256Body": "aa97229042ece5a31ad318e31c256a15ec51a5005a5295580af6bcf6bdf36783",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "feature-policy": "payment 'self'",
+          "x-recruiting": "/#/jobs",
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=0",
+          "last-modified": "Thu, 08 Oct 2026 04:03:32 GMT",
+          "etag": "W/\"24b1-1a119ae3f4d\"",
+          "content-type": "text/html; charset=UTF-8",
+          "content-length": "9393",
+          "vary": "Accept-Encoding",
+          "date": "Thu, 08 Oct 2026 05:55:26 GMT",
+          "connection": "close"
+        },
+        "missingHeaders": [
+          "content-security-policy",
+          "referrer-policy"
+        ]
+      },
+      "challengeApiStatus": 200,
+      "sqlInjectionChallengeId": "unionSqlInjectionChallenge",
+      "sqlInjectionChallengeEnabled": true,
+      "sqlmapVersion": "1.10.9#stable",
+      "sqlmapCommand": [
+        "/usr/bin/sqlmap",
+        "-u",
+        "http://127.0.0.1:3002/rest/products/search?q=ScannerXGT",
+        "-p",
+        "q",
+        "--batch",
+        "--level=2",
+        "--risk=1",
+        "--technique=BE",
+        "--flush-session",
+        "--output-dir",
+        "/home/kali/scannerx-backend/ScannerX/research/juice-shop-v20.2.0/ground-truth/v2.0.0/validation/sqlmap/medium"
+      ],
+      "sqlmapExitCode": 0,
+      "sqlmapBooleanOrErrorBasedInjectionConfirmed": true,
+      "sqlmapEvidenceFile": "medium-sqlmap.txt"
+    },
+    {
+      "runName": "deep",
+      "baseUrl": "http://127.0.0.1:3003",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "rootResponse": {
+        "statusCode": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "sha256Body": "aa97229042ece5a31ad318e31c256a15ec51a5005a5295580af6bcf6bdf36783",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "feature-policy": "payment 'self'",
+          "x-recruiting": "/#/jobs",
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=0",
+          "last-modified": "Thu, 08 Oct 2026 04:03:32 GMT",
+          "etag": "W/\"24b1-1a119ae3f47\"",
+          "content-type": "text/html; charset=UTF-8",
+          "content-length": "9393",
+          "vary": "Accept-Encoding",
+          "date": "Thu, 08 Oct 2026 05:55:30 GMT",
+          "connection": "close"
+        },
+        "missingHeaders": [
+          "content-security-policy",
+          "referrer-policy"
+        ]
+      },
+      "challengeApiStatus": 200,
+      "sqlInjectionChallengeId": "unionSqlInjectionChallenge",
+      "sqlInjectionChallengeEnabled": true,
+      "sqlmapVersion": "1.10.9#stable",
+      "sqlmapCommand": [
+        "/usr/bin/sqlmap",
+        "-u",
+        "http://127.0.0.1:3003/rest/products/search?q=ScannerXGT",
+        "-p",
+        "q",
+        "--batch",
+        "--level=2",
+        "--risk=1",
+        "--technique=BE",
+        "--flush-session",
+        "--output-dir",
+        "/home/kali/scannerx-backend/ScannerX/research/juice-shop-v20.2.0/ground-truth/v2.0.0/validation/sqlmap/deep"
+      ],
+      "sqlmapExitCode": 0,
+      "sqlmapBooleanOrErrorBasedInjectionConfirmed": true,
+      "sqlmapEvidenceFile": "deep-sqlmap.txt"
+    },
+    {
+      "runName": "deep-repeat",
+      "baseUrl": "http://127.0.0.1:3004",
+      "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+      "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+      "repoDigests": [
+        "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+      ],
+      "rootResponse": {
+        "statusCode": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "sha256Body": "aa97229042ece5a31ad318e31c256a15ec51a5005a5295580af6bcf6bdf36783",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "feature-policy": "payment 'self'",
+          "x-recruiting": "/#/jobs",
+          "accept-ranges": "bytes",
+          "cache-control": "public, max-age=0",
+          "last-modified": "Thu, 08 Oct 2026 04:03:32 GMT",
+          "etag": "W/\"24b1-1a119ae3f3b\"",
+          "content-type": "text/html; charset=UTF-8",
+          "content-length": "9393",
+          "vary": "Accept-Encoding",
+          "date": "Thu, 08 Oct 2026 05:55:35 GMT",
+          "connection": "close"
+        },
+        "missingHeaders": [
+          "content-security-policy",
+          "referrer-policy"
+        ]
+      },
+      "challengeApiStatus": 200,
+      "sqlInjectionChallengeId": "unionSqlInjectionChallenge",
+      "sqlInjectionChallengeEnabled": true,
+      "sqlmapVersion": "1.10.9#stable",
+      "sqlmapCommand": [
+        "/usr/bin/sqlmap",
+        "-u",
+        "http://127.0.0.1:3004/rest/products/search?q=ScannerXGT",
+        "-p",
+        "q",
+        "--batch",
+        "--level=2",
+        "--risk=1",
+        "--technique=BE",
+        "--flush-session",
+        "--output-dir",
+        "/home/kali/scannerx-backend/ScannerX/research/juice-shop-v20.2.0/ground-truth/v2.0.0/validation/sqlmap/deep-repeat"
+      ],
+      "sqlmapExitCode": 0,
+      "sqlmapBooleanOrErrorBasedInjectionConfirmed": true,
+      "sqlmapEvidenceFile": "deep-repeat-sqlmap.txt"
+    }
+  ]
+}

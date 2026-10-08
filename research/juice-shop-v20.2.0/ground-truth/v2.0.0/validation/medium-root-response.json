@@ -1,0 +1,25 @@
+{
+  "statusCode": 200,
+  "contentType": "text/html; charset=UTF-8",
+  "sha256Body": "aa97229042ece5a31ad318e31c256a15ec51a5005a5295580af6bcf6bdf36783",
+  "headers": {
+    "access-control-allow-origin": "*",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "SAMEORIGIN",
+    "feature-policy": "payment 'self'",
+    "x-recruiting": "/#/jobs",
+    "accept-ranges": "bytes",
+    "cache-control": "public, max-age=0",
+    "last-modified": "Thu, 08 Oct 2026 04:03:32 GMT",
+    "etag": "W/\"24b1-1a119ae3f4d\"",
+    "content-type": "text/html; charset=UTF-8",
+    "content-length": "9393",
+    "vary": "Accept-Encoding",
+    "date": "Thu, 08 Oct 2026 05:55:26 GMT",
+    "connection": "close"
+  },
+  "missingHeaders": [
+    "content-security-policy",
+    "referrer-policy"
+  ]
+}

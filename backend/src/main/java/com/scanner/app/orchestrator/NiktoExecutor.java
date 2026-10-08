@@ -46,7 +46,7 @@ public class NiktoExecutor extends AbstractFindingExecutor {
                             "Nikto",
                             "Passive",
                             buildFindingTitle(cleanLine),
-                            null,
+                            severityFor(cleanLine),
                             extractAffectedUrl(targetUrl, cleanLine),
                             cleanLine.replaceFirst("^\\+\\s*", ""),
                             cleanLine
@@ -63,7 +63,7 @@ public class NiktoExecutor extends AbstractFindingExecutor {
         return StepExecutionResult.success("Server checks completed.");
     }
 
-    private boolean shouldCreateFinding(String cleanLine) {
+    boolean shouldCreateFinding(String cleanLine) {
         return cleanLine.startsWith("+")
                 && !cleanLine.contains("Target IP:")
                 && !cleanLine.contains("Target Hostname:")
@@ -97,6 +97,16 @@ public class NiktoExecutor extends AbstractFindingExecutor {
             return "Uncommon Response Header Exposed";
         }
         return "Security Result";
+    }
+
+    String severityFor(String cleanLine) {
+        // Nikto's "This might be interesting" only means a path responded; it does not
+        // establish that the resource contains sensitive data. Keep it as a review lead
+        // until the response content or access controls have been validated.
+        if (cleanLine.contains("This might be interesting")) {
+            return "LOW";
+        }
+        return null;
     }
 
     private String extractAffectedUrl(String targetUrl, String cleanLine) {

@@ -20,6 +20,8 @@ public class LightCrawlerService {
 
     private static final Pattern LINK_PATTERN = Pattern.compile("(?i)(?:href|src)=[\"']([^\"'#]+)[\"']");
     private static final Pattern FORM_PATTERN = Pattern.compile("(?i)<form[^>]+action=[\"']([^\"']*)[\"']");
+    private static final Pattern SCRIPT_PATTERN = Pattern.compile("(?is)<script[^>]+src=[\"']([^\"'<>]+)[\"']");
+    private static final Pattern JS_ROUTE_PATTERN = Pattern.compile("[\"'`]((?:/api/|/rest/|/graphql|/\\.well-known/)[^\"'`\\s<>]{0,180})[\"'`]");
     private static final Pattern QUERY_PARAM_PATTERN = Pattern.compile("[?&]([^=&]+)=");
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -61,6 +63,20 @@ public class LightCrawlerService {
                     jsonEndpoints.add(current.url());
                 }
 
+                if (isJavaScript(contentType, current.url())) {
+                    for (String route : extractMatches(body, JS_ROUTE_PATTERN)) {
+                        String resolved = resolve(root, current.url(), route);
+                        if (resolved != null && discoveredUrls.size() < maxUrls && discoveredUrls.add(resolved)) {
+                            queryParameters.addAll(extractQueryParameters(resolved));
+                            if (resolved.contains("/graphql") || resolved.endsWith(".json")) {
+                                jsonEndpoints.add(resolved);
+                            }
+                            queue.add(new CrawlEntry(resolved, current.depth() + 1));
+                        }
+                    }
+                    continue;
+                }
+
                 queryParameters.addAll(extractQueryParameters(current.url()));
 
                 if (!contentType.contains("html") && !looksLikeHtml(body)) {
@@ -72,6 +88,14 @@ public class LightCrawlerService {
                     if (resolved != null) {
                         forms.add(resolved);
                         discoveredUrls.add(resolved);
+                    }
+                }
+
+                for (String scriptSource : extractMatches(body, SCRIPT_PATTERN)) {
+                    String resolved = resolve(root, current.url(), scriptSource);
+                    if (resolved != null && sameHost(root, resolved)
+                            && discoveredUrls.size() < maxUrls && discoveredUrls.add(resolved)) {
+                        queue.add(new CrawlEntry(resolved, current.depth() + 1));
                     }
                 }
 
@@ -161,6 +185,12 @@ public class LightCrawlerService {
     private boolean looksLikeHtml(String body) {
         String snippet = body == null ? "" : body.toLowerCase(Locale.ROOT);
         return snippet.contains("<html") || snippet.contains("<body") || snippet.contains("<a ");
+    }
+
+    private boolean isJavaScript(String contentType, String url) {
+        String normalizedUrl = url == null ? "" : url.toLowerCase(Locale.ROOT);
+        return contentType.contains("javascript") || contentType.contains("ecmascript")
+                || normalizedUrl.matches(".*\\.m?js(?:[?#].*)?$");
     }
 
     private record CrawlEntry(String url, int depth) {}

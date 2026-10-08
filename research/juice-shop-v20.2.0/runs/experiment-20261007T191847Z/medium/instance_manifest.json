@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "runName": "medium",
+  "capturedAtUtc": "2026-10-07T19:21:45.983560+00:00",
+  "baseUrl": "http://127.0.0.1:3002",
+  "challengeApiUrl": "http://127.0.0.1:3002/api/Challenges",
+  "challengeApiStatus": 200,
+  "challengeCount": 116,
+  "image": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+  "repoDigests": [
+    "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b"
+  ],
+  "imageId": "sha256:1eaed5b3d703850efbb54d06da1f7d231c41d968d286d22df083bc78620bfcdc",
+  "containerId": "1917780e8ef7",
+  "containerImageReference": "bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b",
+  "architecture": "amd64",
+  "apiSnapshot": "challenge_api.json",
+  "scanId": 42,
+  "scanTier": "medium",
+  "scanStatus": "COMPLETED",
+  "scanStartedAt": "2026-10-08T00:51:54.300338",
+  "scanCompletedAt": "2026-10-08T01:07:22.23238",
+  "scanDurationSeconds": 927,
+  "toolVersions": null,
+  "scanConfiguration": null
+}

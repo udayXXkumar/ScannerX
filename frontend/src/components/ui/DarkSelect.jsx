@@ -196,6 +196,7 @@ export default function DarkSelect({
         onKeyDown={handleTriggerKeyDown}
         className={cn(triggerClasses, className)}
         style={style}
+        title={selectedOption?.label ?? placeholder}
       >
         <span className={cn('truncate', selectedOption ? 'text-zinc-200' : 'text-slate-500')}>
           {selectedOption?.label ?? placeholder}
@@ -254,7 +255,7 @@ export default function DarkSelect({
                           : 'text-zinc-200 hover:bg-white/[0.05]',
                     )}
                   >
-                    <span className="truncate">{option.label}</span>
+                    <span className="truncate" title={option.label}>{option.label}</span>
                     {isSelected ? <Check size={15} className="shrink-0 text-prowler-green" /> : null}
                   </button>
                 )

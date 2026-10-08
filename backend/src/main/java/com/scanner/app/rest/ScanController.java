@@ -375,36 +375,64 @@ public class ScanController {
             return ResponseEntity.badRequest().body("Scans must belong to the same target for comparison.");
         }
 
-        List<Finding> allTargetFindings = findingRepository.findByTargetId(s1.getTarget().getId());
+        Map<String, Finding> scan1Findings = findingsByComparisonKey(findingRepository.findByScanId(scan1));
+        Map<String, Finding> scan2Findings = findingsByComparisonKey(findingRepository.findByScanId(scan2));
 
-        List<Finding> scan1Findings = allTargetFindings.stream()
-                .filter(f -> !f.getFirstSeenAt().isAfter(s1.getCreatedAt()) && !f.getLastSeenAt().isBefore(s1.getCreatedAt()))
+        List<Map<String, Object>> newFindings = scan2Findings.entrySet().stream()
+                .filter(entry -> !scan1Findings.containsKey(entry.getKey()))
+                .map(entry -> comparisonFinding(entry.getValue()))
                 .toList();
-
-        List<Finding> scan2Findings = allTargetFindings.stream()
-                .filter(f -> !f.getFirstSeenAt().isAfter(s2.getCreatedAt()) && !f.getLastSeenAt().isBefore(s2.getCreatedAt()))
+        List<Map<String, Object>> resolvedFindings = scan1Findings.entrySet().stream()
+                .filter(entry -> !scan2Findings.containsKey(entry.getKey()))
+                .map(entry -> comparisonFinding(entry.getValue()))
                 .toList();
-
-        List<Finding> newFindings = scan2Findings.stream()
-                .filter(f -> !scan1Findings.contains(f))
-                .toList();
-
-        List<Finding> resolvedFindings = scan1Findings.stream()
-                .filter(f -> !scan2Findings.contains(f))
-                .toList();
-
-        List<Finding> unchangedFindings = scan1Findings.stream()
-                .filter(scan2Findings::contains)
+        List<Map<String, Object>> unchangedFindings = scan1Findings.entrySet().stream()
+                .filter(entry -> scan2Findings.containsKey(entry.getKey()))
+                .map(entry -> comparisonFinding(scan2Findings.get(entry.getKey())))
                 .toList();
 
         Map<String, Object> result = new HashMap<>();
-        result.put("scan1", s1);
-        result.put("scan2", s2);
+        result.put("scan1", comparisonScan(s1));
+        result.put("scan2", comparisonScan(s2));
         result.put("newFindings", newFindings);
         result.put("resolvedFindings", resolvedFindings);
         result.put("unchangedFindings", unchangedFindings);
 
         return ResponseEntity.ok(result);
+    }
+
+    private Map<String, Finding> findingsByComparisonKey(List<Finding> findings) {
+        Map<String, Finding> unique = new java.util.LinkedHashMap<>();
+        for (Finding finding : findings) {
+            String key = String.join("|",
+                    normalizeComparisonPart(finding.getCategory()),
+                    normalizeComparisonPart(finding.getTitle()),
+                    normalizeComparisonPart(finding.getAffectedUrl()));
+            unique.putIfAbsent(key, finding);
+        }
+        return unique;
+    }
+
+    private String normalizeComparisonPart(String value) {
+        return value == null ? "" : value.trim().replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private Map<String, Object> comparisonFinding(Finding finding) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", finding.getId());
+        result.put("severity", finding.getSeverity());
+        result.put("title", finding.getTitle());
+        result.put("affectedUrl", finding.getAffectedUrl());
+        return result;
+    }
+
+    private Map<String, Object> comparisonScan(Scan scan) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", scan.getId());
+        result.put("name", scan.getName());
+        result.put("status", scan.getStatus());
+        result.put("createdAt", scan.getCreatedAt());
+        return result;
     }
 
     private Optional<User> resolveCurrentUser(Authentication authentication) {

@@ -1,0 +1,21 @@
+name: scannerx-juice-shop-benchmark
+
+x-juice-shop-image: &juice-shop-image bkimminich/juice-shop@sha256:8739101ade29358abb5469ee66ae78e582c97ed0a5543a4ad102e5fa5193526b
+
+services:
+  juice-fast:
+    image: *juice-shop-image
+    ports: ["127.0.0.1:3001:3000"]
+    restart: unless-stopped
+  juice-medium:
+    image: *juice-shop-image
+    ports: ["127.0.0.1:3002:3000"]
+    restart: unless-stopped
+  juice-deep:
+    image: *juice-shop-image
+    ports: ["127.0.0.1:3003:3000"]
+    restart: unless-stopped
+  juice-deep-repeat:
+    image: *juice-shop-image
+    ports: ["127.0.0.1:3004:3000"]
+    restart: unless-stopped

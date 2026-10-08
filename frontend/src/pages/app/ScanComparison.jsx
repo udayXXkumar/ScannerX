@@ -13,7 +13,7 @@ const ScanComparison = () => {
 
   const { scans = [], isError: isScanStateError } = useWorkspaceScans();
 
-  const { data: comparison, isFetching: isComparing, refetch } = useQuery({
+  const { data: comparison, error: comparisonError, isFetching: isComparing, refetch } = useQuery({
     queryKey: ['compareScans', scan1Id, scan2Id],
     queryFn: async () => {
         const { data } = await api.get(`/scans/compare?scan1=${scan1Id}&scan2=${scan2Id}`);
@@ -48,30 +48,38 @@ const ScanComparison = () => {
           </div>
         ) : null}
         
-        <div className="flex items-center space-x-4 mb-6">
+        <div className="mb-6 grid min-w-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] sm:gap-4">
             <DarkSelect
               value={scan1Id}
               onChange={setScan1Id}
-              className="flex-1"
+              className="w-full min-w-0"
               placeholder="Select Base Scan (Older)"
               options={scans.map((scan) => ({ value: String(scan.id), label: getScanRunLabel(scan) }))}
             />
-            <ArrowRight className="w-5 h-5 text-gray-400" />
+            <ArrowRight className="hidden h-5 w-5 text-gray-400 sm:block" />
             <DarkSelect
               value={scan2Id}
               onChange={setScan2Id}
-              className="flex-1"
+              className="w-full min-w-0"
               placeholder="Select Target Scan (Newer)"
               options={scans.map((scan) => ({ value: String(scan.id), label: getScanRunLabel(scan) }))}
             />
             <button 
                 onClick={handleCompare}
                 disabled={!scan1Id || !scan2Id || scan1Id === scan2Id}
-                className="bg-primary hover:bg-primary-hover text-bg-base font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50"
+                className="w-full rounded-lg bg-primary px-6 py-2 font-semibold text-bg-base transition-colors hover:bg-primary-hover disabled:opacity-50 sm:w-auto"
             >
                 Compare
             </button>
         </div>
+
+        {comparisonError ? (
+          <div role="alert" className="mb-6 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            {comparisonError.response?.data?.message
+              || (typeof comparisonError.response?.data === 'string' ? comparisonError.response.data : null)
+              || 'Could not compare these scans. Confirm both scans belong to the same target and try again.'}
+          </div>
+        ) : null}
         
         {isComparing && <div className="text-gray-400">Comparing scans...</div>}
         

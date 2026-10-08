@@ -29,7 +29,8 @@ public class SqlmapExecutor extends AbstractFindingExecutor {
     @Override
     public StepExecutionResult execute(Scan scan, PlanStep step, ScanExecutionContext context, EventPublisher eventPublisher) throws Exception {
         List<String> candidateUrls = new ArrayList<>(context.getDiscoveredUrls().stream()
-                .filter(url -> url.contains("?"))
+                .filter(url -> url != null && url.contains("?") && !isSocketIoTransportUrl(url))
+                .distinct()
                 .limit(step.intSetting("batchCount", 5))
                 .toList());
         if (candidateUrls.isEmpty() && toolExecutionService.hasQueryParameters(context.getNormalizedTargetUrl())) {
@@ -80,5 +81,14 @@ public class SqlmapExecutor extends AbstractFindingExecutor {
             return StepExecutionResult.nonFatalFailure("Injection validation finished with a non-zero exit code.", false);
         }
         return StepExecutionResult.success("Injection validation completed.");
+    }
+
+    static boolean isSocketIoTransportUrl(String url) {
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            return uri.getPath() != null && uri.getPath().toLowerCase(java.util.Locale.ROOT).contains("/socket.io/");
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 }
